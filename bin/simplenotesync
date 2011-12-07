@@ -1,0 +1,80 @@
+#!/usr/bin/env perl
+
+# PODNAME: simplenotesync
+
+use v5.10;
+use strict;
+use warnings;
+use Webservice::SimpleNote;
+use File::HomeDir;
+use Getopt::Long qw(:config no_ignore_case bundling);
+use Pod::Usage;
+use Config::INI::Reader;
+use Log::Dispatch;
+use Log::Any::Adapter;
+
+my $opt = {
+    sync_dir => "$ENV{HOME}/Documents/Notes",
+    rc_dir   => "$ENV{HOME}/.simplenotesync",
+};
+
+sub get_opts {
+    my $getopt = GetOptions( $opt, 'help|h', 'longhelp|H', 'debug|d!', 'trial|t!', 'version|v',
+        'allow_server_updates!', 'allow_local_updates!', 'file_extension=s', 'email=s', 'password=s');
+
+    if ( $getopt == 0 or defined $opt->{help} ) {
+        pod2usage;
+    }
+
+    if ( defined $opt->{version} ) {
+
+        #say "simplenotesync version $VERSION";
+        exit;
+    }
+
+    if ( $getopt == 0 or defined $opt->{longhelp} ) {
+        pod2usage 1;
+    }
+
+    if ( defined $opt->{debug} ) {
+        say "Options: \n";
+        foreach my $o ( keys %$opt ) {
+            say "$o $opt->{$o}";
+        }
+    }
+    return 1;
+}
+
+get_opts;
+
+Log::Any::Adapter->set('Dispatch', outputs => [[ 'Screen', min_level => 'debug', newline => 1 ],]);
+
+my $store_base_text      = 0;    # Trial mode to allow conflict resolution
+
+# Initialize Database of last sync information into global array
+#my $hash_ref = initSyncDatabase($sync_directory);
+#my %syncNotes = %$hash_ref;
+
+# # # Initialize database of newly synchronized files
+# my %newNotes = ();
+
+# #
+# # Initialize database of files that were deleted this round
+# my %deletedFromDatabase = ();
+
+my $simplenote = Webservice::SimpleNote->new($opt);
+
+# Do Synchronization
+$simplenote->sync_notes_to_folder;
+
+# Write new database for next time
+#writeSyncDatabase($sync_directory);
+
+1;
+
+# Configuration
+#
+# Create file in your home directory named ".simplenotesyncrc"
+# First line is your email address
+# Second line is your Simplenote password
+# Third line is the directory to be used for text files
