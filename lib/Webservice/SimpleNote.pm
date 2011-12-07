@@ -114,7 +114,7 @@ sub _build_token {
     my $response = $self->_ua->post( $self->_uri . "/login", Content => $content );
 
     if ( $response->content =~ /Invalid argument/ ) {
-        die "Problem connecting to web server.\nHave you installed Crypt:SSLeay as instructed?\n";
+        die "Problem connecting to web server.\n";
     }
 
     if ( !$response->is_success ) {
@@ -827,8 +827,6 @@ and a new one exists.
 
 If SimplenoteSync isn't working, I've tried to add more (and better) error
 messages. Common problems so far include:
-
-* Not installing Crypt::SSLeay
 
 * Errors in the "simplenotesyncrc" file
 
