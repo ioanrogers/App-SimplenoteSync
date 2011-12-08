@@ -8,24 +8,28 @@ package Webservice::SimpleNote;
 # TODO: Windows compatibility?? This has not been tested AT ALL yet
 # TODO: Further testing on Linux - mainly file creation time
 # TODO: Net::HTTP::Spore?
+# TODO: use file extension to determine if a note is markdown or not?
+# TODO: use LWP cookie_jar for auth token
+# TODO: abstract synbc db use e.g. SQLite
+# TODO: abstract note storage
+
+our $VERSION = '0.001';
 
 use v5.10;
 use Moose;
 use MooseX::Types::Path::Class;
-
+use Webservice::SimpleNote::Note;
 use LWP::UserAgent;
 use Log::Any qw//;
-use File::Basename;
-use File::Path;
-use Cwd 'abs_path';
+use DateTime;
+use DateTime::Format::HTTP;
 use MIME::Base64;
-
-use Time::Local;
-use File::Copy;
+use JSON;
+use Try::Tiny;
 use Encode qw/decode_utf8/;
-use Data::Dumper;
+use YAML::Any qw/Dump LoadFile DumpFile/;
 
-has [ 'email', 'password', 'token' ] => (
+has [ 'email', 'password' ] => (
     is       => 'ro',
     isa      => 'Str',
     required => 1,
@@ -39,31 +43,36 @@ has token => (
     builder  => '_build_token',
 );
 
-has file_extension => (
-    is       => 'ro',
-    isa      => 'Str',
-    required => 1,
-    default  => 'txt',
+has notes => (
+    is      => 'rw',
+    isa     => 'HashRef[Webservice::SimpleNote::Note]',
+    default => sub { {} },
 );
 
-has [ 'rc_dir', 'sync_dir' ] => (
+has sync_dir => (
     is       => 'ro',
     isa      => 'Path::Class::Dir',
     required => 1,
     coerce   => 1,
-    #builder => '_
 );
 
-has allow_server_updates => (
+has sync_db => (
+    is       => 'ro',
+    isa      => 'Path::Class::File',
+    required => 1,
+    coerce   => 1,
+);
+
+has [ 'allow_server_updates', 'allow_local_updates' ] => (
     is       => 'ro',
     isa      => 'Bool',
     required => 1,
-    default  => '1',
+    default  => 1,
 );
 
 has logger => (
     is       => 'ro',
-    isa      => 'Any',
+    isa      => 'Object',
     lazy     => 1,
     required => 1,
     default  => sub { return Log::Any->get_logger },
@@ -72,14 +81,20 @@ has logger => (
 has _uri => (
     is       => 'ro',
     isa      => 'Str',
-    default  => 'https://simple-note.appspot.com/api',
+    default  => 'https://simple-note.appspot.com/api2',
     required => 1,
 );
 
 has _ua => (
     is      => 'rw',
     isa     => 'LWP::UserAgent',
-    default => sub { return LWP::UserAgent->new; },
+    default => sub {
+        my $headers = HTTP::Headers->new( Content_Type => 'application/json', );
+        return LWP::UserAgent->new(
+            agent           => "Webservice::SimpleNote/$VERSION",
+            default_headers => $headers,
+        );
+    },
 );
 
 sub _build_sync_dir {
@@ -92,11 +107,6 @@ sub _build_sync_dir {
 }
 
 # my $store_base_text = 0;		# Trial mode to allow conflict resolution
-
-# Initialize Database of last sync information into global array
-#my $hash_ref = init_sync_database($sync_directory);
-#my %syncNotes = %$hash_ref;
-my %syncNotes;
 
 # Initialize database of newly synchronized files
 my %newNotes;
@@ -111,130 +121,101 @@ sub _build_token {
     my $content = encode_base64( sprintf 'email=%s&password=%s', $self->email, $self->password );
 
     $self->logger->debug('Network: get token');
-    my $response = $self->_ua->post( $self->_uri . "/login", Content => $content );
 
-    if ( $response->content =~ /Invalid argument/ ) {
-        die "Problem connecting to web server.\n";
-    }
+    # the login uri uses api instead of api2 and must always be https
+    my $response =
+      $self->_ua->post( 'https://simple-note.appspot.com/api/login', Content => $content );
 
     if ( !$response->is_success ) {
-        die "Error logging into Simplenote server:\n" . Dumper($response) . "\n";
+        die "Error logging into Simplenote server:\n" . $response->status_line . "\n";
     }
 
     return $response->content;
 }
 
 # Get list of notes from simplenote server
-sub get_note_index {
-    my $self = shift;
-    my %note = ();
+# TODO since, mark, length options
+sub get_remote_index {
+    my $self  = shift;
+    my $notes = {};
 
     $self->logger->debug('Network: get note index');
     my $req_uri  = sprintf '%s/index?auth=%s&email=%s', $self->_uri, $self->token, $self->email;
     my $response = $self->_ua->get($req_uri);
-    my $index    = $response->content;
+    my $index    = decode_json( $response->content );
 
-    $index =~ s{
-		\{(.*?)\}
-	}{
-		# iterate through notes in index and load into hash
-		my $notedata = $1;
-		
-		$notedata =~ /"key":\s*"(.*?)"/;
-		my $key = $1;
-		
-		while ($notedata =~ /"(.*?)":\s*"?(.*?)"?(,|\Z)/g) {
-			# load note data into hash
-			if ($1 ne "key") {
-				$note{$key}{$1} = $2;
-			}
-		}
-		
-		# Trim fractions of seconds from modification time
-		$note{$key}{modify} =~ s/\..*$//;
-	}egx;
+    $self->logger->debugf( 'Network: Index returned [%s] notes', $index->{count} );
 
-    return \%note;
+    # iterate through notes in index and load into hash
+    foreach my $i ( @{ $index->{data} } ) {
+        $notes->{ $i->{key} } = Webservice::SimpleNote::Note->new($i);
+    }
+
+    say Dump($notes);
+    return $notes;
 }
 
-# Convert note's title into valid filename
+# Convert note's title into file
 sub title_to_filename {
     my ( $self, $title ) = @_;
 
     # Strip prohibited characters
     $title =~ s/[:\\\/]/ /g;
-
-    $title .= '.' . $self->file_extension;
-
-    return $title;
+    my $file = $self->sync_dir->file( "$title.txt" );
+    $self->logger->debug("Title [$title] => File [$file]");
+    return $file;
 }
 
 # Convert filename into title and unescape special characters
 sub filename_to_title {
-    my ( $self, $filename ) = @_;
-
-    $filename = basename($filename);
-    $filename =~ s/\.$self->file_extension$//;
-
-    return $filename;
+    my ( $self, $file ) = @_;
+    my $title = $file->basename;
+    $title =~ s/\.$self->file_extension$//;
+    $self->logger->debug("File [$file] => Title [$title]");
+    return $title;
 }
 
 # Given a local file, upload it as a note at simplenote web server
 sub upload_file_to_note {
-    my ( $self, $filepath, $key ) = @_;    # Supply key if we are updating existing note
+    my ( $self, $file, $key ) = @_;    # Supply key if we are updating existing note
 
-    my $title = $self->filename_to_title($filepath);    # The title for new note
+    my $title = $self->filename_to_title($file);    # The title for new note
 
-    my $content = "\n";                                 # The content for new note
-    open( my $in, '<', $filepath );
-    local $/;
-    $content .= <$in>;
-    close($in);
+    my $content = "\n";                             # The content for new note
+    $content .= $file->slurp;
 
     # Check to make sure text file is encoded as UTF-8
     if ( eval { decode_utf8( $content, Encode::FB_CROAK ); 1 } ) {
 
         # $content is valid utf8
-        $self->logger->debug("$filepath is utf8 encoded");
+        $self->logger->debug("[$file] is utf8 encoded");
     } else {
 
         # TODO not on a mac??
         # $content is not valid utf8 - assume it's macroman and convert
-        $self->logger->debug("$filepath is not a UTF-8 file. Converting");
+        $self->logger->debug("[$file] is not a UTF-8 file. Converting");
         $content = decode( 'MacRoman', $content );
         utf8::encode($content);
     }
 
-    my @d = gmtime( ( stat("$filepath") )[9] );    # get file's modification time
-    my $modified = sprintf "%4d-%02d-%02d %02d:%02d:%02d", $d[5] + 1900, $d[4] + 1, $d[3], $d[2],
-      $d[1], $d[0];
+    #time_thingy
+    my ( $modified, $created ) = 'blah';
 
-    if ( $^O =~ /darwin/i ) {
-
-        # The following works on Mac OS X - need a "birth time", not ctime
-        @d = gmtime( readpipe("stat -f \"%B\" \"$filepath\"") );    # created time
-    } else {
-
-        # TODO: Need a better way to do this on non Mac systems
-        @d = gmtime( ( stat("$filepath") )[9] );                    # get file's modification time
+    if ( !$self->allow_server_updates ) {
+        $self->logger->warn('Sending notes to the server is disabled');
+        return;
     }
-
-    my $created = sprintf "%4d-%02d-%02d %02d:%02d:%02d", $d[5] + 1900, $d[4] + 1, $d[3], $d[2],
-      $d[1], $d[0];
 
     if ( defined($key) ) {
 
         # We are updating an old note
-        if ( $self->allow_server_updates ) {
-            $self->logger->debug("Network: update existing note [$title]");
-            my $modifyString = $modified ? "&modify=$modified" : "";
-            my $req_uri = sprintf '%s/note?key=%s&auth=%s&email=%s%s', $self->_uri, $key,
-              $self->token, $self->email, $modifyString;
-            my $response =
-              $self->_ua->post( $req_uri, Content => encode_base64( $title . "\n" . $content ) );
-        } else {
-            $self->logger->warn('Sending notes to the server is disabled');
-        }
+
+        $self->logger->debug("Network: update existing note [$title]");
+        my $modifyString = $modified ? "&modify=$modified" : "";
+        my $req_uri = sprintf '%s/note?key=%s&auth=%s&email=%s%s', $self->_uri, $key,
+          $self->token, $self->email, $modifyString;
+        my $response =
+          $self->_ua->post( $req_uri, Content => encode_base64( $title . "\n" . $content ) );
 
     } else {
 
@@ -256,50 +237,15 @@ sub upload_file_to_note {
             } else {
                 $key = 0;
             }
-        } else {
-            $self->logger->warn('Sending notes to the server is disabled');
         }
     }
-
-    # Add this note to the sync'ed list for writing to database
-    $newNotes{$key}{modify} = $modified;
-    $newNotes{$key}{create} = $created;
-    $newNotes{$key}{title}  = $title;
-    $newNotes{$key}{file}   = titleToFilename($title);
-
-    # TODO storage paths
-    #if (($store_base_text) && ($allow_local_updates)) {
-    # # Put a copy of note in storage
-    # my $copy = dirname($filepath) . "/SimplenoteSync Storage/" . basename($filepath);
-    # copy($filepath,$copy);
-    # }
 
     return $key;
 }
 
-# Save local copy of note from Simplenote server
-sub download_note_to_file {
-    my ( $self, $key, $directory, $overwrite ) = @_;
-
-    #my $storage_directory = "$directory/SimplenoteSync Storage";
-
-    # retrieve note
-
-    $self->logger->debug("Network: retrieve existing note [$key]");
-
-    # TODO are there any other encoding options?
-    my $req_uri = sprintf '%s/note?key=%s&auth=%s&email=%s&encode=base64', $self->_uri, $key,
-      $self->token, $self->email;
-    my $response = $self->_ua->get($req_uri);
-    my $content  = decode_base64( $response->content );
-
-    if ( $content eq "" ) {
-
-        # No such note exists any longer
-        $self->logger->warn("$key no longer exists on server");
-        $deletedFromDatabase{$key} = 1;
-        return;
-    }
+# TODO: only for file storage
+sub _get_title_from_content {
+    my ( $self, $content ) = @_;
 
     # Parse into title and content (if present)
     $content =~ s/^(.*?)(\n{1,2}|\Z)//s;    # First line is title
@@ -315,83 +261,45 @@ sub download_note_to_file {
         $title   = $self->trim_title($title);
     }
 
-    my $filename = $self->title_to_filename($title);
+    return $title;
+}
 
-    # If note is marked for deletion on the server, don't download
-    if ( $response->header('note-deleted') eq "True" ) {
-        if ( ( $overwrite == 1 ) && ( $self->allow_local_updates ) ) {
+# Save local copy of note from Simplenote server
+sub get_note {
+    my ( $self, $note ) = @_;
 
-            # If we're in overwrite mode, then delete local copy
-            File::Path::rmtree("$directory/$filename");
-            $deletedFromDatabase{$key} = 1;
+    $self->logger->debugf( 'Network: retrieve existing note [%s]', $note->key );
 
-            # if ($store_base_text) {
-            # # Delete storage copy
-            # File::Path::rmtree("$storage_directory/$filename");
-            # }
-        } else {
-            $self->logger->debug("Note [$key] was flagged for deletion on server - not downloaded");
-
-            # Optionally, could add "&dead=1" to force Simplenote to remove
-            #	this note from the database. Could cause problems on iPhone
-            #	Just for future reference....
-            $deletedFromDatabase{$key} = 1;
-        }
-        return "";
+    # TODO are there any other encoding options?
+    my $req_uri = sprintf '%s/data/%s?auth=%s&email=%s', $self->_uri, $note->key,
+      $self->token, $self->email;
+    my $response = $self->_ua->get($req_uri);
+    
+    if ( !$response->is_success ) {
+        $self->logger->errorf( '[%s] could not be retrieved: %s',
+            $note->key, $response->status_line );
+        return;
     }
+    my $new_data = decode_json($response->content);
+    # XXX: anything to merge?
+    $note = Webservice::SimpleNote::Note->new($new_data);
+    
+    $note->title($self->_get_title_from_content( $note->content ));
+    $note->file($self->title_to_filename($note->title));
 
-    # Get time of note creation (trim fractions of seconds)
-    my $create = my $createString = $response->header('note-createdate');
-    $create =~ /(\d\d\d\d)-(\d\d)-(\d\d)\s*(\d\d):(\d\d):(\d\d)/;
-    $create = timegm( $6, $5, $4, $3, $2 - 1, $1 );
-    $createString =~ s/\..*$//;
-
-    # Get time of note modification (trim fractions of seconds)
-    my $modify = my $modifyString = $response->header('note-modifydate');
-    $modify =~ /(\d\d\d\d)-(\d\d)-(\d\d)\s*(\d\d):(\d\d):(\d\d)/;
-    $modify = timegm( $6, $5, $4, $3, $2 - 1, $1 );
-    $modifyString =~ s/\..*$//;
-
-    # Create new file
-
-    if (   ( -f "$directory/$filename" )
-        && ( $overwrite == 0 ) )
-    {
-
-        # A file already exists with that name, and we're not intentionally
-        #	replacing with a new copy.
-        $self->logger->warn("$filename already exists. Will not download.");
-
-        return "";
-    } else {
-        if ( $self->allow_local_updates ) {
-            open( my $fh, '>', "$directory/$filename" );
-            print $fh $content;
-            close $fh;
-
-            # if ($store_base_text) {
-            # # Put a copy in storage
-            # open (FILE, ">$storage_directory/$filename");
-            # print FILE $content;
-            # close FILE;
-            # }
-
-            # Set created and modified time
-            # Not sure why this has to be done twice, but it seems to on Mac OS X
-            utime $create, $create, "$directory/$filename";
-            utime $create, $modify, "$directory/$filename";
-
-            $newNotes{$key}{modify} = $modifyString;
-            $newNotes{$key}{create} = $createString;
-            $newNotes{$key}{file}   = $filename;
-            $newNotes{$key}{title}  = $title;
-
-            # Add this note to the sync'ed list for writing to database
-            return $filename;
-        }
+    if ( !$self->allow_local_updates ) {
+        return;
     }
+    my $fh = $note->file->open('w');
+    $fh->print($note->content);
+    $fh->close;
 
-    return "";
+    # Set created and modified time
+    # XXX: Not sure why this has to be done twice, but it seems to on Mac OS X
+    utime $note->createdate->epoch, $note->modifydate->epoch, $note->file;
+    #utime $create, $modify, $filename;
+
+    return;
 }
 
 # If title is too long, it won't be a valid filename
@@ -428,273 +336,274 @@ sub merge_conflicts {
 
 }
 
-# Main Synchronization routine
-sub sync_notes_to_folder {
-    my ($self) = @_;
+sub time_thingy {
+    my ( $self, $file ) = @_;
 
-    # my $storage_directory = "$directory/SimplenoteSync Storage";
-    # if ((! -e $storage_directory) && $store_base_text) {
-    # # This directory saves a copy of the text at each successful sync
-    # #	to allow three way merging
-    # mkdir $storage_directory;
+    # my @d = gmtime( ( $file->stat) )[9] );
+    # $file{$filepath}{modify} = sprintf "%4d-%02d-%02d %02d:%02d:%02d", $d[5] + 1900, $d[4] + 1,
+    # $d[3], $d[2], $d[1], $d[0];
+
+    # #         if ( $^O =~ /darwin/i ) {
+
+    # #             # The following works on Mac OS X - need a "birth time", not ctime
+    # # created time
+    # @d = gmtime( readpipe("stat -f \"%B\" \"$filepath\"") );
+    # } else {
+
+    # #             # TODO: Need a better way to do this on non Mac systems
+    # # get file's modification time
+    # @d = gmtime( ( stat("$filepath") )[9] );
     # }
 
-    # get list of existing notes from server with mod date and delete status
-    my $note_ref = $self->get_note_index;
-    my %note     = %$note_ref;
+# #         $file{$filepath}{create} = sprintf "%4d-%02d-%02d %02d:%02d:%02d", $d[5] + 1900, $d[4] + 1,
+# $d[3], $d[2], $d[1], $d[0];
+}
 
-    # get list of existing local text files with mod/creation date
-    my %file;
+# Iterate through sync database and assess current state of those files
+sub get_local_index {
+    my $self = shift;
 
-    my $glob_directory = $self->sync_dir;
-    $glob_directory =~ s/ /\\ /g;
+    # get previous sync info, if available
+    my $local_notes = $self->_read_sync_database;
 
-    foreach my $filepath ( glob("$glob_directory/*.$self->file_extension") ) {
-        $filepath = abs_path($filepath);
-        my @d = gmtime( ( stat("$filepath") )[9] );
-        $file{$filepath}{modify} = sprintf "%4d-%02d-%02d %02d:%02d:%02d", $d[5] + 1900, $d[4] + 1,
-          $d[3], $d[2], $d[1], $d[0];
+    return $local_notes;
 
-        if ( $^O =~ /darwin/i ) {
-
-            # The following works on Mac OS X - need a "birth time", not ctime
-            # created time
-            @d = gmtime( readpipe("stat -f \"%B\" \"$filepath\"") );
-        } else {
-
-            # TODO: Need a better way to do this on non Mac systems
-            # get file's modification time
-            @d = gmtime( ( stat("$filepath") )[9] );
-        }
-
-        $file{$filepath}{create} = sprintf "%4d-%02d-%02d %02d:%02d:%02d", $d[5] + 1900, $d[4] + 1,
-          $d[3], $d[2], $d[1], $d[0];
-    }
-
-    # Iterate through sync database and assess current state of those files
-
-    foreach my $key ( keys %syncNotes ) {
-
-        # Cycle through each prior note from last sync
-        my $last_mod_date = $syncNotes{$key}{modify};
-        my $filename      = $syncNotes{$key}{file};
-
-        if ( defined( $file{"$self->sync_dir/$filename"} ) ) {
-
-            # the current item appears to exist as a local file
-            $self->logger->debug("[$filename] exists");
-            if ( $file{"$self->sync_dir/$filename"}{modify} eq $last_mod_date ) {
+    foreach my $note ( keys %{$local_notes} ) {
+        if ( -f $note->file ) {
+            $self->logger->debugf( '[%s]->[%s] exists', $note, $note->file->stringify );
+            my $file_mtime = DateTime->from_epoch( epoch => $note->file->stat->mtime );
+            if ( DateTime->compare( $note->modify, $file_mtime ) == 0 ) {
 
                 # file appears unchanged
-                $self->logger->debug("[$key] local copy unchanged");
+                $self->logger->debug("[$note] local copy unchanged");
 
-                if ( defined( $note{$key}{modify} ) ) {
+                # #                 if ( defined( $note->{$key}{modify} ) ) {
 
-                    # Remote copy also exists
-                    $self->logger->debug("[$key] remote copy exists");
+                # #                     # Remote copy also exists
+                # $self->logger->debug("[$key] remote copy exists");
 
-                    if ( $note{$key}{modify} eq $last_mod_date ) {
+                # #                     if ( $note->{$key}->modify eq $last_mod_date ) {
 
-                        # note on server also appears unchanged
+                # #                         # note on server also appears unchanged
 
-                        # Nothing more to do
-                    } else {
+                # #                         # Nothing more to do
+                # } else {
 
-                        # note on server has changed, but local file hasn't
-                        $self->logger->debug("[$key] remote file is changed");
-                        if ( $note{$key}{deleted} eq "true" ) {
+                # #                         # note on server has changed, but local file hasn't
+                # $self->logger->debug("[$key] remote file is changed");
+                # if ( $note->{$key}->deleted ) {
 
-                            # Remote note was flagged for deletion
-                            $self->logger->info("Deleting [$filename] as it was deleted on server");
-                            if ( $self->allow_local_updates ) {
-                                File::Path::rmtree("$self->sync_dir/$filename");
-                                delete( $file{"$self->sync_dir/$filename"} );
-                            }
-                        } else {
+                # #                             # Remote note was flagged for deletion
+                # $self->logger->info("Deleting [$filename] as it was deleted on server");
+                # if ( $self->allow_local_updates ) {
+                # File::Path::rmtree("$self->sync_dir/$filename");
+                # delete( $file{"$self->sync_dir/$filename"} );
+                # }
+                # } else {
 
-                            # Remote note not flagged for deletion
-                            # update local file and overwrite if necessary
-                            my $newFile = $self->download_note_to_file( $key, $self->sync_dir, 1 );
+                # #                             # Remote note not flagged for deletion
+                # # update local file and overwrite if necessary
+                # my $newFile = $self->download_note_to_file( $key, $self->sync_dir, 1 );
 
-                            if ( ( $newFile ne $filename ) && ( $newFile ne "" ) ) {
-                                $self->logger->info(
-                                    "Deleting [$filename] as it was renamed to [$newFile]");
+            # #                             if ( ( $newFile ne $filename ) && ( $newFile ne "" ) ) {
+            # $self->logger->info(
+            # "Deleting [$filename] as it was renamed to [$newFile]");
 
-                                # The file was renamed on server; delete old copy
-                                if ( $self->allow_local_updates ) {
-                                    File::Path::rmtree("$self->sync_dir/$filename");
-                                    delete( $file{"$self->sync_dir/$filename"} );
-                                }
-                            }
-                        }
-                    }
+               # #                                 # The file was renamed on server; delete old copy
+               # if ( $self->allow_local_updates ) {
+               # File::Path::rmtree("$self->sync_dir/$filename");
+               # delete( $file{"$self->sync_dir/$filename"} );
+               # }
+               # }
+               # }
+               # }
 
-                    # Remove this file from other queues
-                    delete( $note{$key} );
-                    delete( $file{"$self->sync_dir/$filename"} );
-                } else {
+                # #                     # Remove this file from other queues
+                # delete( $note->{$key} );
+                # delete( $file{"$self->sync_dir/$filename"} );
+                # } else {
 
-                    # remote file is gone, delete local
-                    $self->logger->debug("Delete [$filename]");
-                    File::Path::rmtree("$self->sync_dir/$filename")
-                      if ( $self->allow_local_updates );
-                    $deletedFromDatabase{$key} = 1;
-                    delete( $note{$key} );
-                    delete( $file{"$self->sync_dir/$filename"} );
+                # #                     # remote file is gone, delete local
+                # $self->logger->debug("Delete [$filename]");
+                # File::Path::rmtree("$self->sync_dir/$filename")
+                # if ( $self->allow_local_updates );
+                # $deletedFromDatabase{$key} = 1;
+                # delete( $note->{$key} );
+                # delete( $file{"$self->sync_dir/$filename"} );
+                # }
+                # } else {
+
+                # #                 # local file appears changed
+                # $self->logger->debug("[$filename] has changed");
+
+                # #                 if ( $note->{$key}{modify} eq $last_mod_date ) {
+
+                # #                     # but note on server is old
+                # $self->logger->debug("[$filename] server copy is unchanged");
+
+                # #                     # update note on server
+                # $self->upload_file_to_note( "$self->sync_dir/$filename", $key );
+
+                # #                     # Remove this file from other queues
+                # delete( $note->{$key} );
+                # delete( $file{"$self->sync_dir/$filename"} );
+                # } else {
+
+               # #                     # note on server has also changed
+               # $self->logger->warn(
+               # "[$filename] was modified locally and on server - please check file for conflicts."
+               # );
+
+                # #                     # Use the stored copy from last sync to enable a three way
+                # #	merge, then use this as the official copy and allow
+                # #	user to manually edit any conflicts
+
+                # #                     #$self->merge_conflicts($key);
+
+                # #                     # Remove this file from other queues
+                # delete( $note->{$key} );
+                # delete( $file{"$self->sync_dir/$filename"} );
+                # }
+                # }
+                # } else {
+
+                # #             # no file exists - it must have been deleted locally
+                # if ( $note->{$key}->modify eq $last_mod_date ) {
+
+                # #                 # note on server also appears unchanged
+
+                # #                 # so we delete this file
+                # $self->logger->debug("Killing [$filename]");
+                # $self->delete_note_online($key);
+
+                # #                 # Remove this file from other queues
+                # delete( $note->{$key} );
+                # delete( $file{"$self->sync_dir/$filename"} );
+                # $deletedFromDatabase{$key} = 1;
+
+                # #             } else {
+
+                # #                 # note on server has also changed
+
+                # #                 if ( $note->{$key}->deleted ) {
+
+                # #                     # note on server was deleted also
+                # $self->logger->debug("Deleting [$filename]");
+
+                # #                     # Don't do anything locally
+                # delete( $note->{$key} );
+                # delete( $file{"$self->sync_dir/$filename"} );
+                # } else {
+                # $self->logger->warn("[$filename] deleted locally but modified on server");
+
+                # #                     # So, download from the server to resync, and
+                # #	user must then re-delete if desired
+                # $self->download_note_to_file( $key, $self->sync_dir, 0 );
+
+                # #                     # Remove this file from other queues
+                # delete( $note->{$key} );
+                # delete( $file{"$self->sync_dir/$filename"} );
+                #    }
+            }
+        }
+    }
+}
+
+# Main Synchronization routine
+sub sync_notes {
+    my ($self) = @_;
+
+    # get list of existing notes from server with mod date and delete status
+    my $remote_notes = $self->get_remote_index;
+
+    # get previous sync info, if available
+    my $local_notes = $self->get_local_index;
+
+    # merge notes
+    while ( my ( $key, $note ) = each $local_notes ) {
+        $self->notes->{$key} = $note;
+    }
+
+    while ( my ( $key, $note ) = each $remote_notes ) {
+        if ( exists $self->notes->{$key} ) {
+
+            # which is newer?
+            $self->logger->debug("[$key] exists locally and remotely");
+            given ( DateTime->compare( $note->modifydate, $self->notes->{$key}->modifydate ) ) {
+                when (0) {
+                    $self->logger->debug("[$key] not modified");
                 }
-            } else {
-
-                # local file appears changed
-                $self->logger->debug("[$filename] has changed");
-
-                if ( $note{$key}{modify} eq $last_mod_date ) {
-
-                    # but note on server is old
-                    $self->logger->debug("[$filename] server copy is unchanged");
-
-                    # update note on server
-                    $self->upload_file_to_note( "$self->sync_dir/$filename", $key );
-
-                    # Remove this file from other queues
-                    delete( $note{$key} );
-                    delete( $file{"$self->sync_dir/$filename"} );
-                } else {
-
-                    # note on server has also changed
-                    $self->logger->warn(
-"[$filename] was modified locally and on server - please check file for conflicts."
-                    );
-
-                    # Use the stored copy from last sync to enable a three way
-                    #	merge, then use this as the official copy and allow
-                    #	user to manually edit any conflicts
-
-                    #$self->merge_conflicts($key);
-
-                    # Remove this file from other queues
-                    delete( $note{$key} );
-                    delete( $file{"$self->sync_dir/$filename"} );
+                when (1) {
+                    $self->logger->debug("[$key] remote note is newer");
+                }
+                when (-1) {
+                    $self->logger->debug("[$key] local note is newer");
                 }
             }
         } else {
-
-            # no file exists - it must have been deleted locally
-
-            if ( $note{$key}{modify} eq $last_mod_date ) {
-
-                # note on server also appears unchanged
-
-                # so we delete this file
-                $self->logger->debug("Killing [$filename]");
-                $self->delete_note_online($key);
-
-                # Remove this file from other queues
-                delete( $note{$key} );
-                delete( $file{"$self->sync_dir/$filename"} );
-                $deletedFromDatabase{$key} = 1;
-
-            } else {
-
-                # note on server has also changed
-
-                if ( $note{$key}{deleted} eq "true" ) {
-
-                    # note on server was deleted also
-                    $self->logger->debug("Deleting [$filename]");
-
-                    # Don't do anything locally
-                    delete( $note{$key} );
-                    delete( $file{"$self->sync_dir/$filename"} );
-                } else {
-                    $self->logger->warn("[$filename] deleted locally but modified on server");
-
-                    # So, download from the server to resync, and
-                    #	user must then re-delete if desired
-                    $self->download_note_to_file( $key, $self->sync_dir, 0 );
-
-                    # Remove this file from other queues
-                    delete( $note{$key} );
-                    delete( $file{"$self->sync_dir/$filename"} );
-                }
+            $self->logger->debug("[$key] does not exist localy");
+            if ( !$note->deleted ) {
+                $self->get_note($note);
             }
         }
     }
 
-    # Now, we need to look at new notes on server and download
-    foreach my $key ( sort keys %note ) {
-
-        # Download, but don't overwrite existing file if present
-        if ( $note{$key}{deleted} ne "true" ) {
-            $self->download_note_to_file( $key, $self->sync_dir, 0 );
-        }
-    }
-
+    # TODO abstract this out
     # Finally, we need to look at new files locally and upload to server
-    foreach my $new_file ( sort keys %file ) {
-        $self->logger->debug("New local file [$new_file]");
-        $self->upload_file_to_note($new_file);
-    }
-}
-
-sub init_sync_database {
-
-    # from <http://docstore.mik.ua/orelly/perl/cookbook/ch11_11.htm>
-
-    my ( $self, $directory ) = @_;
-    my %synchronizedNotes = ();
-
-    if ( open( DB, "<$directory/simplenotesync.db" ) ) {
-
-        $/ = "";    # paragraph read mode
-        while (<DB>) {
-            my @array = ();
-
-            my @fields = split /^([^:]+):\s*/m;
-            shift @fields;    # for leading null field
-            push( @array, { map /(.*)/, @fields } );
-
-            for my $record (@array) {
-                for my $key ( sort keys %$record ) {
-                    $synchronizedNotes{ $record->{key} }{$key} = $record->{$key};
-                }
+    $self->logger->debugf( 'Looking for new files in [%s]', $self->sync_dir->stringify );
+    while ( my $f = $self->sync_dir->next ) {
+        next unless -f $f;
+        $self->logger->debug("Checking $f");
+        my $is_known = 0;
+        foreach my $note ( @{ $self->notes } ) {
+            if ( $note->file eq $f ) {
+                $is_known = 1;
+                last;
             }
         }
-
-        close DB;
+        if ($is_known) {
+            $self->logger->debug("New local file [$f]");
+            my $note = Webservice::SimpleNote::Note->new(
+                createdate => $f->stat->ctime,
+                modifydate => $f->stat->mtime,
+                content    => $f->slurp,
+            );
+            $self->upload_file_to_note($note);
+        }
     }
 
-    return \%synchronizedNotes;
 }
 
-sub write_sync_database {
-
-    # from <http://docstore.mik.ua/orelly/perl/cookbook/ch11_11.htm>
+sub _read_sync_database {
     my $self = shift;
-    return 0 if ( !$self->allow_local_updates );
-    my ($directory) = @_;
+    my $notes;
 
-    open( DB, ">$directory/simplenotesync.db" );
+    try {
+        $notes = LoadFile( $self->sync_db );
+    };
 
-    foreach my $record ( sort keys %newNotes ) {
-        for my $key ( sort keys %{ $newNotes{$record} } ) {
-            $syncNotes{$record}{$key} = ${ $newNotes{$record} }{$key};
-        }
+    if ( !defined $notes ) {
+        $self->logger->debug('No existing sync db');
+        return {};
     }
 
-    foreach my $key ( sort keys %deletedFromDatabase ) {
-        delete( $syncNotes{$key} );
-    }
-
-    foreach my $record ( sort keys %syncNotes ) {
-        print DB "key: $record\n";
-        for my $key ( sort keys %{ $syncNotes{$record} } ) {
-            print DB "$key: ${$syncNotes{$record}}{$key}\n";
-        }
-        print DB "\n";
-    }
-
-    close DB;
+    return $notes;
 }
+
+sub _write_sync_database {
+    my $self = shift;
+
+    if ( !$self->allow_local_updates ) {
+        return;
+    }
+
+    $self->logger->debug('Writing sync db');
+
+    DumpFile( $self->sync_db, $self->notes );
+}
+
+no Moose;
+__PACKAGE__->meta->make_immutable;
 
 1;
 

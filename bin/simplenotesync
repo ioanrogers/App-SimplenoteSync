@@ -6,75 +6,131 @@ use v5.10;
 use strict;
 use warnings;
 use Webservice::SimpleNote;
-use File::HomeDir;
+use File::BaseDir;
 use Getopt::Long qw(:config no_ignore_case bundling);
 use Pod::Usage;
 use Config::INI::Reader;
 use Log::Dispatch;
 use Log::Any::Adapter;
+use YAML::Any;
 
-my $opt = {
-    sync_dir => "$ENV{HOME}/Documents/Notes",
-    rc_dir   => "$ENV{HOME}/.simplenotesync",
-};
+my $logger;
+
+our $PROGNAME = 'simplenotesync';
+
+my $opt = {};
 
 sub get_opts {
-    my $getopt = GetOptions( $opt, 'help|h', 'longhelp|H', 'debug|d!', 'trial|t!', 'version|v',
-        'allow_server_updates!', 'allow_local_updates!', 'file_extension=s', 'email=s', 'password=s');
+    my $getopt = GetOptions(
+        $opt,                    'help|h',
+        'longhelp|H',            'debug|d!',
+        'trial|t!',              'version|v',
+        'allow_server_updates!', 'allow_local_updates!',
+        'email=s',
+        'password=s'
+    );
 
     if ( $getopt == 0 or defined $opt->{help} ) {
         pod2usage;
     }
 
     if ( defined $opt->{version} ) {
-
-        #say "simplenotesync version $VERSION";
+        say "$PROGNAME version $Webservice::SimpleNote::VERSION";
         exit;
     }
 
     if ( $getopt == 0 or defined $opt->{longhelp} ) {
         pod2usage 1;
     }
-
-    if ( defined $opt->{debug} ) {
-        say "Options: \n";
-        foreach my $o ( keys %$opt ) {
-            say "$o $opt->{$o}";
-        }
-    }
     return 1;
 }
 
+sub get_logger {
+
+    my $log_level = 'warning';
+    if ( $opt->{debug} ) {
+        $log_level = 'debug';
+    }
+
+    # TODO interactive/background
+    $logger = Log::Dispatch->new(
+        outputs => [
+            [
+                'Screen::Color',
+                min_level => $log_level,
+                newline   => 1,
+            ],
+            [
+                'Syslog',
+                min_level => $log_level,
+                ident     => $PROGNAME,
+            ],
+        ],
+    );
+
+    if ( $opt->{debug} ) {
+        require Log::Dispatch::File;
+        require DateTime;
+        my $sub = sub {
+            my %p   = @_;
+            my $dt  = DateTime->now;
+            my $str = sprintf '%s::%s::%s', $dt->iso8601, uc $p{level}, $p{message};
+            return $str;
+        };
+
+        $logger->add(
+            Log::Dispatch::File->new(
+                name      => 'debug_file',
+                min_level => 'debug',
+                filename  => $PROGNAME . '_debug.log',
+                newline   => 1,
+                callbacks => $sub,
+            )
+        );
+    }
+
+    Log::Any::Adapter->set( 'Dispatch', dispatcher => $logger );
+}
+
+sub get_config {
+    my $conf_dir  = Path::Class::Dir->new( File::BaseDir->config_home );
+    my $conf_file = $conf_dir->file("$PROGNAME.ini");
+    $logger->debug("Reading config from $conf_file");
+    my $config = Config::INI::Reader->read_file($conf_file);
+
+    if (!$opt->{sync_db}) {
+        $opt->{sync_db} = Path::Class::File->new( File::BaseDir->cache_home("$PROGNAME.yaml") );
+    }
+    
+    # merge config opts - cli opts take precedence
+    foreach my $key ( keys %{ $config->{_} } ) {
+        if ( !exists $opt->{$key} ) {
+            $opt->{$key} = $config->{_}->{$key};
+        }
+    }
+
+    if ( !$opt->{debug} ) {
+        return;
+    }
+
+    $logger->debug('======= Options ========');
+    foreach my $key ( keys %$opt ) {
+        my $value = $opt->{$key};
+        if ( $key eq 'password' ) {
+            $value = '***REDACTED***';
+        }
+        $logger->debug("$key: [$value]");
+    }
+    $logger->debug('===== End Options ======');
+}
+
 get_opts;
-
-Log::Any::Adapter->set('Dispatch', outputs => [[ 'Screen', min_level => 'debug', newline => 1 ],]);
-
-my $store_base_text      = 0;    # Trial mode to allow conflict resolution
-
-# Initialize Database of last sync information into global array
-#my $hash_ref = initSyncDatabase($sync_directory);
-#my %syncNotes = %$hash_ref;
-
-# # # Initialize database of newly synchronized files
-# my %newNotes = ();
-
-# #
-# # Initialize database of files that were deleted this round
-# my %deletedFromDatabase = ();
+get_logger;
+get_config;
 
 my $simplenote = Webservice::SimpleNote->new($opt);
 
 # Do Synchronization
-$simplenote->sync_notes_to_folder;
-
-# Write new database for next time
-#writeSyncDatabase($sync_directory);
+$simplenote->sync_notes;
 
 1;
-
-# Configuration
-#
-# Create file in your home directory named ".simplenotesyncrc"
-# First line is your email address
-# Second line is your Simplenote password
-# Third line is the directory to be used for text files
