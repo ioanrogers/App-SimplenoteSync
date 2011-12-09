@@ -47,7 +47,7 @@ sub get_opts {
 
 sub get_logger {
 
-    my $log_level = 'warning';
+    my $log_level = 'info';
     if ( $opt->{debug} ) {
         $log_level = 'debug';
     }
