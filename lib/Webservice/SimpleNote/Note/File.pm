@@ -22,18 +22,12 @@ has sync_dir => (
     isa      => 'Path::Class::Dir',
     required => 1,
     coerce   => 1,
+    metaclass => 'DoNotSerialize',
 );
 
 MooseX::Storage::Engine->add_custom_type_handler(
     'Path::Class::File' => (
         expand => sub { Path::Class::File->new( $_[0]) },
-        collapse => sub { $_[0]->stringify }
-    )
-);
-
-MooseX::Storage::Engine->add_custom_type_handler(
-    'Path::Class::Dir' => (
-        expand => sub { Path::Class::Dir->new( $_[0]) },
         collapse => sub { $_[0]->stringify }
     )
 );
