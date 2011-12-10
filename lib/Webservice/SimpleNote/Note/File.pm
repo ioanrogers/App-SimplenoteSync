@@ -1,13 +1,12 @@
 package Webservice::SimpleNote::Note::File;
 
-# ABSTRACT: stores notes in plain files, with the metadata in YAML
+# ABSTRACT: stores notes in plain files,
 
 # TODO: need to compare information between local and remote files when same title in both (e.g. simplenotesync.db lost, or collision)
 
 use v5.10;
 use Moose;
 use MooseX::Types::Path::Class;
-use YAML::Any qw/Dump LoadFile DumpFile/;
 
 extends 'Webservice::SimpleNote::Note';
 
@@ -17,12 +16,16 @@ has file => (
     coerce   => 1,
 );
 
-has sync_dir => (
-    is       => 'ro',
-    isa      => 'Path::Class::Dir',
-    required => 1,
-    coerce   => 1,
+has file_extensions => (
+    is => 'ro',
+    isa => 'HashRef',
     metaclass => 'DoNotSerialize',
+    default => sub {
+        {
+            default  => 'txt',
+            markdown => 'mkdn',
+        }
+    }
 );
 
 MooseX::Storage::Engine->add_custom_type_handler(
@@ -32,21 +35,11 @@ MooseX::Storage::Engine->add_custom_type_handler(
     )
 );
 
-sub _build_sync_dir {
-    my $self = shift;
-    if ( !-d $self->sync_dir ) {
-
-        # Target directory doesn't exist
-        die "Sync directory [" . $self->sync_dir . "] does not exist\n";
-    }
-}
-
 # Convert note's title into file
 sub title_to_filename {
     my ( $self, $title ) = @_;
 
-    # Strip prohibited characters
-    $title =~ s/\W/_/g;
+    
     # TODO trim 
     my $file = $self->sync_dir->file("$title.txt");
     $self->logger->debug("Title [$title] => File [$file]");
@@ -84,35 +77,6 @@ sub time_thingy {
 
 # #         $file{$filepath}{create} = sprintf "%4d-%02d-%02d %02d:%02d:%02d", $d[5] + 1900, $d[4] + 1,
 # $d[3], $d[2], $d[1], $d[0];
-}
-
-sub _read_sync_database {
-    my $self = shift;
-    my $notes;
-
-    try {
-        $notes = LoadFile( $self->sync_db );
-    };
-
-    if ( !defined $notes ) {
-        $self->logger->debug('No existing sync db');
-        return;
-    }
-
-    $self->notes($notes);
-    return 1;
-}
-
-sub _write_sync_database {
-    my $self = shift;
-
-    if ( !$self->allow_local_updates ) {
-        return;
-    }
-
-    $self->logger->debug('Writing sync db');
-    # XXX only write if changed? Add a dirty attr?
-    DumpFile( $self->sync_db, $self->notes );
 }
 
 no Moose;
