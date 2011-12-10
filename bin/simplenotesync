@@ -133,4 +133,80 @@ my $simplenote = Webservice::SimpleNote->new($opt);
 # Do Synchronization
 $simplenote->sync_notes;
 
-1;
+__END__
+
+=head1 DESCRIPTION
+
+After specifying a folder to store local text files, and the email address and
+password associated with your Simplenote account, SimplenoteSync will attempt
+to synchronize the information in both places.
+
+Sync information is stored in "simplenotesync.db". If this file is lost,
+SimplenoteSync will have to attempt to look for "collisions" between local
+files and existing notes. When performing the first synchronization, it's best
+to start with an empty local folder (or an empty collection of notes on
+Simplenote), and then start adding files (or notes) afterwards.
+
+=head1 WARNING
+
+Please note that this software is still in development stages --- I STRONGLY
+urge you to backup all of your data before running to ensure nothing is lost.
+If you run SimplenoteSync on an empty local folder without a
+"simplenotesync.db" file, the net result will be to copy the remote notes to
+the local folder, effectively performing a backup.
+
+=head1 KNOWN ISSUES
+
+* it's probably not very efficient and might really bog down with large
+  numbers of notes
+
+* renaming notes or text files causes it to be treated as a new note -
+  probably not all bad, but not sure what else to do. For now, you'll have to
+  manually delete the old copy
+
+=head1 FAQ
+
+* Why can I download notes from Simplenote, but local notes aren't being
+  uploaded?
+
+=over
+
+Do the text files end in ".txt"? For documents to be recognized as text files
+to be uploaded, they have to have that file extension. *Unless* you have
+specified an alternate file extension to use in ".simplenotesyncrc".
+
+Text files can't be located in subdirectories - this script does not (by
+design) recurse folders looking for files (since they shouldn't be anywhere
+but the specified directory).
+
+=back
+
+* When my note is downloaded from Simplenote and then changed locally, I end
+  up with two copies of the first line (one shorter than the other) - what
+  gives?
+
+=over
+
+If the first line of a note is too long to become the filename, it is trimmed
+to an appropriate length. To prevent losing data, the full line is preserved
+in the body. Since Simplenote doesn't have a concept of titles, the title
+becomes the first line (which is trimmed), and the original first line is now
+the third line (counting the blank line in between). Your only alternatives
+are to shorten the first line, split it in two, or to create a short title
+
+=back
+
+* If I rename a note, what happens?
+
+=over
+
+If you rename a note on Simplenote by changing the first line, a new text file
+will be created and the old one will be deleted, preserving the original
+creation date. If you rename a text file locally, the old note on Simplenote
+will be deleted and a new one will be created, again preserving the original
+creation date. In the second instance, there is not actually any recognition
+of a "rename" going on - simply the recognition that an old note was deleted
+and a new one exists.
+
+=back
+

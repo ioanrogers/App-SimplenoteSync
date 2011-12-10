@@ -4,9 +4,10 @@ package Webservice::SimpleNote::Note;
 
 use v5.10;
 use Moose;
-use MooseX::Types::Path::Class;
 use MooseX::Types::DateTime qw/DateTime/;
-use JSON qw//;
+use MooseX::Storage;
+
+with Storage('format' => 'JSON');
 
 # set by server
 has key => (
@@ -58,30 +59,50 @@ has systemtags => (
     # pinned, unread, markdown, list
 );
 
-has file => (
-    is       => 'rw',
-    isa      => 'Path::Class::File',
-    coerce   => 1,
-);
-
 # XXX: always coerce to utf-8?
 has content => (
     is  => 'rw',
     isa => 'Str',
 );
 
-# TODO title and file are not in the api docs, should maybe exclude them?
-sub TO_JSON {
-    my $self = shift;
+MooseX::Storage::Engine->add_custom_type_handler(
+    'DateTime' => (
+        expand => sub { DateTime->from_epoch( epoch => $_[0]) },
+        collapse => sub { $_[0]->epoch }
+    )
+);
+
+# If title is too long, it won't be a valid filename
+sub trim_title {
+    my ( $self, $title ) = @_;
+    $title =~ s/^(.{1,240}).*?$/$1/;
+    $title =~ s/(.*)\s.*?$/$1/;        # Try to trim at a word boundary
+
+    return $title;
+}
+
+
+sub _get_title_from_content {
+    my ( $self, $note ) = @_;
     
-    # throw it all into a hash, then overwrite problem cases
-    my %hash = %{ $self };
+    my $content = $note->content;
     
-    $hash{createdate} = $self->createdate->epoch;
-    $hash{modifydate} = $self->modifydate->epoch;
-    #say Dump(%hash);
-    
-    return \%hash;
+    # TODO look for first line which contains some \w
+    # Parse into title and content (if present)
+    $content =~ s/^(.*?)(\n{1,2}|\Z)//s;    # First line is title
+    my $title   = $1;
+    my $divider = $2;
+
+    # If first line is particularly long, it will get trimmed, so
+    # leave it in body, and make a short version for the title
+    if ( length($title) > 240 ) {
+
+        # Restore first line to content and create new title
+        $content = $title . $divider . $content;
+        $title   = $self->trim_title($title);
+    }
+
+    return $title;
 }
 
 no Moose;
