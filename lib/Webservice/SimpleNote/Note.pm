@@ -81,7 +81,6 @@ sub trim_title {
     return $title;
 }
 
-
 sub _get_title_from_content {
     my ( $self, $note ) = @_;
     

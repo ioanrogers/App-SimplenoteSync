@@ -24,6 +24,20 @@ has sync_dir => (
     coerce   => 1,
 );
 
+MooseX::Storage::Engine->add_custom_type_handler(
+    'Path::Class::File' => (
+        expand => sub { Path::Class::File->new( $_[0]) },
+        collapse => sub { $_[0]->stringify }
+    )
+);
+
+MooseX::Storage::Engine->add_custom_type_handler(
+    'Path::Class::Dir' => (
+        expand => sub { Path::Class::Dir->new( $_[0]) },
+        collapse => sub { $_[0]->stringify }
+    )
+);
+
 sub _build_sync_dir {
     my $self = shift;
     if ( !-d $self->sync_dir ) {
