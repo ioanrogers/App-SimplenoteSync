@@ -5,7 +5,7 @@
 use v5.10;
 use strict;
 use warnings;
-use Webservice::SimpleNote;
+use WebService::Simplenote;
 use File::BaseDir;
 use Getopt::Long qw(:config no_ignore_case bundling);
 use Pod::Usage;
@@ -35,7 +35,7 @@ sub get_opts {
     }
 
     if ( defined $opt->{version} ) {
-        say "$PROGNAME version $Webservice::SimpleNote::VERSION";
+        say "$PROGNAME version $WebService::Simplenote::VERSION";
         exit;
     }
 
@@ -134,7 +134,7 @@ get_opts;
 get_logger;
 get_config;
 
-my $simplenote = Webservice::SimpleNote->new($opt);
+my $simplenote = WebService::Simplenote->new($opt);
 
 # Do Synchronization
 $simplenote->sync_notes;

@@ -1,4 +1,4 @@
-package Webservice::SimpleNote;
+package WebService::Simplenote;
 
 # ABSTRACT: access and sync with simplenoteapp.com
 
@@ -26,7 +26,7 @@ use JSON;
 use Try::Tiny;
 use Class::Load;
 
-use Webservice::SimpleNote::Note;
+use WebService::Simplenote::Note;
 
 has [ 'email', 'password' ] => (
     is       => 'ro',
@@ -44,13 +44,13 @@ has token => (
 
 has notes => (
     is      => 'rw',
-    isa     => 'HashRef[Webservice::SimpleNote::Note]',
+    isa     => 'HashRef[WebService::Simplenote::Note]',
     default => sub { {} },
 );
 
 has store => (
     is       => 'rw',
-    isa      => 'Webservice::SimpleNote::Storage',
+    isa      => 'WebService::Simplenote::Storage',
     lazy => 1,
     builder => '_load_storage_plugin',
 );
@@ -99,7 +99,7 @@ has _ua => (
     default => sub {
         my $headers = HTTP::Headers->new( Content_Type => 'application/json', );
         return LWP::UserAgent->new(
-            agent           => "Webservice::SimpleNote/$VERSION",
+            agent           => "WebService::Simplenote/$VERSION",
             default_headers => $headers,
         );
     },
@@ -127,7 +127,7 @@ sub _build_token {
 sub _load_storage_plugin {
     my $self = shift;
     
-    my $plugin = 'Webservice::SimpleNote::Storage::';
+    my $plugin = 'WebService::Simplenote::Storage::';
     $plugin .= ucfirst $self->storage_plugin;
     $self->logger->debug('Loading storage plugin: ' . $plugin);
     Class::Load::load_class($plugin);
@@ -150,7 +150,7 @@ sub get_remote_index {
 
     # iterate through notes in index and load into hash
     foreach my $i ( @{ $index->{data} } ) {
-        $notes->{ $i->{key} } = Webservice::SimpleNote::Note->new($i);
+        $notes->{ $i->{key} } = WebService::Simplenote::Note->new($i);
     }
 
     return $notes;
@@ -218,7 +218,7 @@ sub get_note {
     my $new_data = decode_json( $response->content );
 
     # XXX: anything to merge?
-    $note = Webservice::SimpleNote::Note->new($new_data);
+    $note = WebService::Simplenote::Note->new($new_data);
 
     $note->title( $self->_get_title_from_content( $note ) );
     $note->file( $self->title_to_filename( $note->title ) );
@@ -327,7 +327,7 @@ sub sync_notes {
         if (!$is_known) {
             $self->logger->info("New local file [$f]");
             my $content = $f->slurp; # TODO: iomode + encoding
-            my $note = Webservice::SimpleNote::Note->new(
+            my $note = WebService::Simplenote::Note->new(
                 createdate => $f->stat->ctime,
                 modifydate => $f->stat->mtime,
                 content    => $content,

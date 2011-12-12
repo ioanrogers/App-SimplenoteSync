@@ -4,15 +4,15 @@ use Test::More tests => 3;
 
 my $sync_dir = 't/notes';
 
-use Webservice::SimpleNote::Note::File;
+use WebService::Simplenote::Note::File;
 
-my $note = Webservice::SimpleNote::Note::File->new(
+my $note = WebService::Simplenote::Note::File->new(
     createdate => 1323518226,
     modifydate => 1323518226,
     sync_dir   => $sync_dir,
 );
 
 ok( defined $note,                              'new() returns something' );
-ok( $note->isa('Webservice::SimpleNote::Note'), '... the correct class' );
+ok( $note->isa('WebService::Simplenote::Note'), '... the correct class' );
 
 ok( my $json_str = $note->freeze, 'Serialise note to JSON' );

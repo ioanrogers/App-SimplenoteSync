@@ -1,4 +1,4 @@
-package Webservice::SimpleNote::Storage::DB_File;
+package WebService::Simplenote::Storage::DB_File;
 
 # ABSTRACT: Stores the notes in a db file
 
@@ -8,7 +8,7 @@ use MooseX::Types::Path::Class;
 use YAML::Any qw/Dump LoadFile DumpFile/;
 use namespace::autoclean;
 
-extends 'Webservice::SimpleNote::Storage';
+extends 'WebService::Simplenote::Storage';
 
 has sync_db => (
     is       => 'rw',

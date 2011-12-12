@@ -1,4 +1,4 @@
-package Webservice::SimpleNote::Note;
+package WebService::Simplenote::Note;
 
 # ABSTRACT: represents an individual note
 

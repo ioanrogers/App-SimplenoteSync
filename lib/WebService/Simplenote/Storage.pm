@@ -1,4 +1,4 @@
-package Webservice::SimpleNote::Storage;
+package WebService::Simplenote::Storage;
 
 # ABSTRACT: Handles storage of the notes and metadata
 

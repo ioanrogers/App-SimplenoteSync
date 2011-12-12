@@ -1,4 +1,4 @@
-package Webservice::SimpleNote::Storage::File;
+package WebService::Simplenote::Storage::File;
 
 # ABSTRACT: Handles storage of the notes and metadata
 
@@ -11,7 +11,7 @@ use Try::Tiny;
 use YAML::Any qw/Dump LoadFile DumpFile/;
 use namespace::autoclean;
 
-extends 'Webservice::SimpleNote::Storage';
+extends 'WebService::Simplenote::Storage';
 
 has sync_db => (
     is       => 'rw',

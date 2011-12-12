@@ -9,8 +9,8 @@ else {
     plan tests => 2;
 }
 
-require 'Webservice::SimpleNote';
+require 'WebService::Simplenote';
 
-my $sn = Webservice::SimpleNote->new;
+my $sn = WebService::Simplenote->new;
 ok( defined $note,                              'new() returns something' );
-ok( $note->isa('Webservice::SimpleNote::Note'), '... the correct class' );
+ok( $note->isa('WebService::Simplenote::Note'), '... the correct class' );

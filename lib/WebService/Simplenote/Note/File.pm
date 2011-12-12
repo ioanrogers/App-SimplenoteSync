@@ -1,4 +1,4 @@
-package Webservice::SimpleNote::Note::File;
+package WebService::Simplenote::Note::File;
 
 # ABSTRACT: stores notes in plain files,
 
@@ -8,7 +8,7 @@ use v5.10;
 use Moose;
 use MooseX::Types::Path::Class;
 
-extends 'Webservice::SimpleNote::Note';
+extends 'WebService::Simplenote::Note';
 
 has file => (
     is       => 'rw',
