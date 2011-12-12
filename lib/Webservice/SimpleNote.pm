@@ -24,6 +24,7 @@ use DateTime;
 use MIME::Base64 qw//;
 use JSON;
 use Try::Tiny;
+use Class::Load;
 
 use Webservice::SimpleNote::Note;
 
@@ -47,11 +48,27 @@ has notes => (
     default => sub { {} },
 );
 
-has sync_db => (
-    is       => 'ro',
-    isa      => 'Path::Class::File',
+has store => (
+    is       => 'rw',
+    isa      => 'Webservice::SimpleNote::Storage',
+    lazy => 1,
+    builder => '_load_storage_plugin',
+);
+
+has storage_plugin => (
+    is => 'ro',
+    isa => 'Str',
     required => 1,
-    coerce   => 1,
+    lazy => 1,
+    default => 'file',
+);
+
+has storage_opts => (
+    is => 'ro',
+    isa => 'HashRef',
+    required => 1,
+    lazy => 1,
+    default => sub {{}},
 );
 
 has [ 'allow_server_updates', 'allow_local_updates' ] => (
@@ -105,6 +122,17 @@ sub _build_token {
     }
 
     return $response->content;
+}
+
+sub _load_storage_plugin {
+    my $self = shift;
+    
+    my $plugin = 'Webservice::SimpleNote::Storage::';
+    $plugin .= ucfirst $self->storage_plugin;
+    $self->logger->debug('Loading storage plugin: ' . $plugin);
+    Class::Load::load_class($plugin);
+
+    return $plugin->new($self->storage_opts);
 }
 
 # Get list of notes from simplenote server
@@ -253,7 +281,7 @@ sub sync_notes {
     my $remote_notes = $self->get_remote_index;
 
     # get previous sync info, if available
-    $self->_read_sync_database;
+    $self->store->read_sync_db;
 
     while ( my ( $key, $note ) = each $remote_notes ) {
         if ( exists $self->notes->{$key} ) {

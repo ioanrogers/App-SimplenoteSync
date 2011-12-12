@@ -7,6 +7,7 @@ package Webservice::SimpleNote::Storage::File;
 use v5.10;
 use Moose;
 use MooseX::Types::Path::Class;
+use Try::Tiny;
 use YAML::Any qw/Dump LoadFile DumpFile/;
 use namespace::autoclean;
 
@@ -36,7 +37,7 @@ sub _check_sync_dir {
         or die "Sync directory [" . $self->sync_dir . "] does not exist\n";
 }
 
-sub _read_sync_db {
+sub read_sync_db {
     my $self = shift;
     my $notes;
 
@@ -49,11 +50,10 @@ sub _read_sync_db {
         return;
     }
 
-    $self->notes($notes);
-    return 1;
+    return $notes;
 }
 
-sub _write_sync_db {
+sub write_sync_db {
     my $self = shift;
 
     if ( !$self->allow_local_updates ) {

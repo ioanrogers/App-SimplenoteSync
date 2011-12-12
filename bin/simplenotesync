@@ -97,10 +97,6 @@ sub get_config {
     my $conf_file = $conf_dir->file("$PROGNAME.ini");
     $logger->debug("Reading config from $conf_file");
     my $config = Config::INI::Reader->read_file($conf_file);
-
-    if (!$opt->{sync_db}) {
-        $opt->{sync_db} = Path::Class::File->new( File::BaseDir->cache_home("$PROGNAME.yaml") );
-    }
     
     # merge config opts - cli opts take precedence
     foreach my $key ( keys %{ $config->{_} } ) {
@@ -108,7 +104,17 @@ sub get_config {
             $opt->{$key} = $config->{_}->{$key};
         }
     }
-
+    
+    $opt->{storage_opts} = $config->{storage};
+    
+    if (!$opt->{storage_opts}->{sync_db}) {
+        $opt->{storage_opts}->{sync_db} = Path::Class::File->new( File::BaseDir->cache_home("$PROGNAME.yaml") );
+    }
+    
+    if (!$opt->{storage_opts}->{sync_dir}) {
+        $opt->{storage_opts}->{sync_dir} = Path::Class::Dir->new( $ENV{HOME} . '/Notes');
+    }
+    
     if ( !$opt->{debug} ) {
         return;
     }
