@@ -1,4 +1,4 @@
-package WebService::SimplenoteSync;
+package App::SimplenoteSync;
 
 # ABSTRACT: access and sync with simplenoteapp.com
 
@@ -18,7 +18,7 @@ use Log::Any qw//;
 use DateTime;
 use Try::Tiny;
 
-use WebService::Simplenote::Note;
+use App::SimplenoteSync::Note;
 
 has [ 'email', 'password' ] => (
     is       => 'ro',
@@ -47,26 +47,66 @@ has logger => (
     default  => sub { return Log::Any->get_logger },
 );
 
+has sync_db => (
+    is       => 'rw',
+    isa      => 'Path::Class::File',
+    coerce   => 1,
+);
+
+has sync_dir => (
+    is       => 'ro',
+    isa      => 'Path::Class::Dir',
+    required => 1,
+    coerce   => 1,
+    metaclass => 'DoNotSerialize',
+    trigger  => \&_check_sync_dir,
+);
+
+sub _check_sync_dir {
+    my $self = shift;
+    if ( -d $self->sync_dir ) {
+        return;
+    }
+    $self->sync_dir->mkpath
+        or die "Sync directory [" . $self->sync_dir . "] does not exist\n";
+}
+
+sub _read_sync_db {
+    my $self = shift;
+    my $notes;
+
+    try {
+        $notes = LoadFile( $self->sync_db );
+    };
+
+    if ( !defined $notes ) {
+        $self->logger->debug('No existing sync db');
+        return;
+    }
+
+    return $notes;
+}
+
+sub _write_sync_db {
+    my $self = shift;
+
+    if ( !$self->allow_local_updates ) {
+        return;
+    }
+
+    $self->logger->debug('Writing sync db');
+    # XXX only write if changed? Add a dirty attr?
+    DumpFile( $self->sync_db, $self->notes );
+}
+
 # Save local copy of note from Simplenote server
 sub get_note {
     my ( $self, $note ) = @_;
 
     $self->logger->infof( 'Retrieving note [%s]', $note->key );
 
-    # TODO are there any other encoding options?
-    my $req_uri = sprintf '%s/data/%s?auth=%s&email=%s', $self->_uri, $note->key,
-      $self->token, $self->email;
-    my $response = $self->_ua->get($req_uri);
-
-    if ( !$response->is_success ) {
-        $self->logger->errorf( '[%s] could not be retrieved: %s',
-            $note->key, $response->status_line );
-        return;
-    }
-    my $new_data = decode_json( $response->content );
-
     # XXX: anything to merge?
-    $note = WebService::Simplenote::Note->new($new_data);
+    $note = WebService::Simplenote::Note->new();
 
     $note->title( $self->_get_title_from_content( $note ) );
     $note->file( $self->title_to_filename( $note->title ) );
@@ -107,14 +147,14 @@ sub merge_conflicts {
 
 }
 
-# Main Synchronization routine
-sub sync_notes {
+# if available, load syncdb, compare it to exsting text files, then get remote index,
+# merge lists with any non indexed files, then ask for sync
+sub get_local_notes {
     my ($self) = @_;
     
-    $self->simplenote->sync_notes;
+    $self->_read_sync_db;
     
-    # Finally, we need to look at new files locally and upload to server
-    $self->logger->debugf( 'Looking for new files in [%s]', $self->sync_dir->stringify );
+    $self->logger->debugf( 'Scanning files in [%s]', $self->sync_dir->stringify );
     while ( my $f = $self->sync_dir->next ) {
         next unless -f $f;
         $self->logger->debug("Checking $f");
