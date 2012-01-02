@@ -21,25 +21,20 @@ our $PROGNAME = 'simplenotesync';
 my $opt = {};
 
 sub get_opts {
-    my $getopt = GetOptions(
-        $opt,                    'help|h',
-        'longhelp|H',            'debug|d!',
-        'trial|t!',              'version|v',
-        'allow_server_updates!', 'allow_local_updates!',
-        'email=s',
-        'password=s'
-    );
+    my $getopt = GetOptions( $opt, 'help|h', 'longhelp|H', 'debug|d!', 'trial|t!', 'version|v',
+        'allow_server_updates!', 'allow_local_updates!', 'email=s', 'password=s' );
 
     if ( $getopt == 0 or defined $opt->{help} ) {
         pod2usage;
     }
 
     if ( defined $opt->{version} ) {
-        say "$PROGNAME version $WebService::Simplenote::VERSION";
+        printf "%s version %s [using WebService::Simplenote %s]\n", $PROGNAME,
+          $App::SimplenoteSync::VERSION, $WebService::Simplenote::VERSION;
         exit;
     }
 
-    if ( $getopt == 0 or defined $opt->{longhelp} ) {
+    if ( defined $opt->{longhelp} ) {
         pod2usage 1;
     }
     return 1;
@@ -97,24 +92,25 @@ sub get_config {
     my $conf_file = $conf_dir->file("$PROGNAME.ini");
     $logger->debug("Reading config from $conf_file");
     my $config = Config::INI::Reader->read_file($conf_file);
-    
+
     # merge config opts - cli opts take precedence
     foreach my $key ( keys %{ $config->{_} } ) {
         if ( !exists $opt->{$key} ) {
             $opt->{$key} = $config->{_}->{$key};
         }
     }
-    
+
     $opt->{storage_opts} = $config->{storage};
-    
-    if (!$opt->{storage_opts}->{sync_db}) {
-        $opt->{storage_opts}->{sync_db} = Path::Class::File->new( File::BaseDir->cache_home("$PROGNAME.yaml") );
+
+    if ( !$opt->{storage_opts}->{sync_db} ) {
+        $opt->{storage_opts}->{sync_db} =
+          Path::Class::File->new( File::BaseDir->cache_home("$PROGNAME.yaml") );
     }
-    
-    if (!$opt->{storage_opts}->{sync_dir}) {
-        $opt->{storage_opts}->{sync_dir} = Path::Class::Dir->new( $ENV{HOME} . '/Notes');
+
+    if ( !$opt->{storage_opts}->{sync_dir} ) {
+        $opt->{storage_opts}->{sync_dir} = Path::Class::Dir->new( $ENV{HOME} . '/Notes' );
     }
-    
+
     if ( !$opt->{debug} ) {
         return;
     }
@@ -215,4 +211,3 @@ of a "rename" going on - simply the recognition that an old note was deleted
 and a new one exists.
 
 =back
-

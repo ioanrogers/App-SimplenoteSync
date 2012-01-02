@@ -13,12 +13,12 @@ use v5.10;
 use Moose;
 use MooseX::Types::Path::Class;
 use namespace::autoclean;
-
+use YAML::Any qw/DumpFile LoadFile Dump/;
 use Log::Any qw//;
 use DateTime;
 use Try::Tiny;
-
 use App::SimplenoteSync::Note;
+use WebService::Simplenote;
 
 has [ 'email', 'password' ] => (
     is       => 'ro',
@@ -28,8 +28,21 @@ has [ 'email', 'password' ] => (
 
 has notes => (
     is      => 'rw',
-    isa     => 'HashRef[WebService::Simplenote::Note]',
+    isa     => 'HashRef[App::SimplenoteSync::Note]',
     default => sub { {} },
+);
+
+has simplenote => (
+    is      => 'rw',
+    isa     => 'WebService::Simplenote',
+    lazy    => 1,
+    default => sub {
+        my $self = shift;
+        return WebService::Simplenote->new(
+            email    => $self->email,
+            password => $self->password,
+            allow_server_updates => $self->allow_server_updates,
+        )},
 );
 
 has [ 'allow_server_updates', 'allow_local_updates' ] => (
@@ -83,8 +96,10 @@ sub _read_sync_db {
         $self->logger->debug('No existing sync db');
         return;
     }
-
-    return $notes;
+    
+    $self->logger->debugf('Loaded %d notes from sync db', scalar (keys $notes));
+    $self->notes($notes);
+    return 1;
 }
 
 sub _write_sync_db {
@@ -103,11 +118,11 @@ sub _write_sync_db {
 sub get_note {
     my ( $self, $note ) = @_;
 
-    $self->logger->infof( 'Retrieving note [%s]', $note->key );
-
     # XXX: anything to merge?
-    $note = WebService::Simplenote::Note->new();
+    $note = WebService::Simplenote::Note->new;
 
+    $self->simplenote->get_note($note);
+    
     $note->title( $self->_get_title_from_content( $note ) );
     $note->file( $self->title_to_filename( $note->title ) );
 
@@ -135,6 +150,18 @@ sub delete_note {
     }
 
     delete $self->notes->{$note->key};
+    return 1;
+}
+
+sub put_note {
+    my ( $self, $note ) = @_;
+    
+    my $new_key = $self->simplenote->put_note($note);
+    if ($new_key) {
+        $note->key($new_key);
+    }
+    
+    $self->{notes}->{$note->key} = $note;
     return 1;
 }
 
@@ -169,19 +196,19 @@ sub get_local_notes {
         if (!$is_known) {
             $self->logger->info("New local file [$f]");
             my $content = $f->slurp; # TODO: iomode + encoding
-            my $note = WebService::Simplenote::Note->new(
+            say $content;
+            my $note = App::SimplenoteSync::Note->new(
                 createdate => $f->stat->ctime,
                 modifydate => $f->stat->mtime,
                 content    => $content,
                 systemtags => ['markdown'],
                 file       => $f,
             );
-
             $self->put_note($note);
         }
     }
     
-    $self->_write_sync_database;
+    $self->_write_sync_db;
 }
 
 no Moose;
