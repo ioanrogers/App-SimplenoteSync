@@ -11,26 +11,26 @@ use MooseX::Types::Path::Class;
 extends 'WebService::Simplenote::Note';
 
 has file => (
-    is       => 'rw',
-    isa      => 'Path::Class::File',
-    coerce   => 1,
+    is     => 'rw',
+    isa    => 'Path::Class::File',
+    coerce => 1,
 );
 
 has file_extensions => (
-    is => 'ro',
-    isa => 'HashRef',
+    is        => 'ro',
+    isa       => 'HashRef',
     metaclass => 'DoNotSerialize',
-    default => sub {
+    default   => sub {
         {
             default  => 'txt',
             markdown => 'mkdn',
-        }
+        };
     }
 );
 
 MooseX::Storage::Engine->add_custom_type_handler(
     'Path::Class::File' => (
-        expand => sub { Path::Class::File->new( $_[0]) },
+        expand   => sub { Path::Class::File->new( $_[0] ) },
         collapse => sub { $_[0]->stringify }
     )
 );
@@ -39,10 +39,9 @@ MooseX::Storage::Engine->add_custom_type_handler(
 sub title_to_filename {
     my ( $self, $title ) = @_;
 
-    
-    # TODO trim 
-    my $file = $self->sync_dir->file("$title.txt");
-    $self->logger->debug("Title [$title] => File [$file]");
+    # TODO trim
+    my $file = $self->sync_dir->file( "$title.txt" );
+    $self->logger->debug( "Title [$title] => File [$file]" );
     return $file;
 }
 
@@ -51,10 +50,9 @@ sub filename_to_title {
     my ( $self, $file ) = @_;
     my $title = $file->basename;
     $title =~ s/\.txt$//;
-    $self->logger->debug("File [$file] => Title [$title]");
+    $self->logger->debug( "File [$file] => Title [$title]" );
     return $title;
 }
-
 
 sub time_thingy {
     my ( $self, $file ) = @_;
@@ -75,8 +73,8 @@ sub time_thingy {
     # @d = gmtime( ( stat("$filepath") )[9] );
     # }
 
-# #         $file{$filepath}{create} = sprintf "%4d-%02d-%02d %02d:%02d:%02d", $d[5] + 1900, $d[4] + 1,
-# $d[3], $d[2], $d[1], $d[0];
+    # #         $file{$filepath}{create} = sprintf "%4d-%02d-%02d %02d:%02d:%02d", $d[5] + 1900, $d[4] + 1,
+    # $d[3], $d[2], $d[1], $d[0];
 }
 
 no Moose;

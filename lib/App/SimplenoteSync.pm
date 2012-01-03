@@ -39,10 +39,11 @@ has simplenote => (
     default => sub {
         my $self = shift;
         return WebService::Simplenote->new(
-            email    => $self->email,
-            password => $self->password,
+            email                => $self->email,
+            password             => $self->password,
             allow_server_updates => $self->allow_server_updates,
-        )},
+        );
+    },
 );
 
 has [ 'allow_server_updates', 'allow_local_updates' ] => (
@@ -61,27 +62,27 @@ has logger => (
 );
 
 has sync_db => (
-    is       => 'rw',
-    isa      => 'Path::Class::File',
-    coerce   => 1,
+    is     => 'rw',
+    isa    => 'Path::Class::File',
+    coerce => 1,
 );
 
-has sync_dir => (
-    is       => 'ro',
-    isa      => 'Path::Class::Dir',
-    required => 1,
-    coerce   => 1,
+has notes_dir => (
+    is        => 'ro',
+    isa       => 'Path::Class::Dir',
+    required  => 1,
+    coerce    => 1,
     metaclass => 'DoNotSerialize',
-    trigger  => \&_check_sync_dir,
+    trigger   => \&_check_notes_dir,
 );
 
-sub _check_sync_dir {
+sub _check_notes_dir {
     my $self = shift;
-    if ( -d $self->sync_dir ) {
+    if ( -d $self->notes_dir ) {
         return;
     }
-    $self->sync_dir->mkpath
-        or die "Sync directory [" . $self->sync_dir . "] does not exist\n";
+    $self->notes_dir->mkpath
+      or die "Sync directory [" . $self->notes_dir . "] does not exist\n";
 }
 
 sub _read_sync_db {
@@ -93,12 +94,12 @@ sub _read_sync_db {
     };
 
     if ( !defined $notes ) {
-        $self->logger->debug('No existing sync db');
+        $self->logger->debug( 'No existing sync db' );
         return;
     }
-    
-    $self->logger->debugf('Loaded %d notes from sync db', scalar (keys $notes));
-    $self->notes($notes);
+
+    $self->logger->debugf( 'Loaded %d notes from sync db', scalar( keys $notes ) );
+    $self->notes( $notes );
     return 1;
 }
 
@@ -109,7 +110,8 @@ sub _write_sync_db {
         return;
     }
 
-    $self->logger->debug('Writing sync db');
+    $self->logger->debug( 'Writing sync db' );
+
     # XXX only write if changed? Add a dirty attr?
     DumpFile( $self->sync_db, $self->notes );
 }
@@ -121,15 +123,15 @@ sub get_note {
     # XXX: anything to merge?
     $note = WebService::Simplenote::Note->new;
 
-    $self->simplenote->get_note($note);
-    
+    $self->simplenote->get_note( $note );
+
     $note->title( $self->_get_title_from_content( $note ) );
     $note->file( $self->title_to_filename( $note->title ) );
 
     if ( !$self->allow_local_updates ) {
         return;
     }
-    my $fh = $note->file->open('w');
+    my $fh = $note->file->open( 'w' );
     $fh->print( $note->content );
     $fh->close;
 
@@ -138,7 +140,7 @@ sub get_note {
     utime $note->createdate->epoch, $note->modifydate->epoch, $note->file;
 
     #utime $create, $modify, $filename;
-    $self->notes->{$note->key} = $note;
+    $self->notes->{ $note->key } = $note;
 
     return 1;
 }
@@ -149,19 +151,19 @@ sub delete_note {
         return;
     }
 
-    delete $self->notes->{$note->key};
+    delete $self->notes->{ $note->key };
     return 1;
 }
 
 sub put_note {
     my ( $self, $note ) = @_;
-    
-    my $new_key = $self->simplenote->put_note($note);
-    if ($new_key) {
-        $note->key($new_key);
+
+    my $new_key = $self->simplenote->put_note( $note );
+    if ( $new_key ) {
+        $note->key( $new_key );
     }
-    
-    $self->{notes}->{$note->key} = $note;
+
+    $self->{notes}->{ $note->key } = $note;
     return 1;
 }
 
@@ -177,25 +179,28 @@ sub merge_conflicts {
 # if available, load syncdb, compare it to exsting text files, then get remote index,
 # merge lists with any non indexed files, then ask for sync
 sub get_local_notes {
-    my ($self) = @_;
-    
+    my ( $self ) = @_;
+
     $self->_read_sync_db;
-    
-    $self->logger->debugf( 'Scanning files in [%s]', $self->sync_dir->stringify );
-    while ( my $f = $self->sync_dir->next ) {
+    my $new_notes     = 0;
+    my $changed_notes = 0;
+    my $num_notes     = scalar $self->notes_dir->children( no_hidden => 1 );
+
+    $self->logger->infof( 'Scanning [%d] files in [%s]', $num_notes, $self->notes_dir->stringify );
+    while ( my $f = $self->notes_dir->next ) {
         next unless -f $f;
-        $self->logger->debug("Checking $f");
+        $self->logger->debug( "Checking $f" );
         my $is_known = 0;
         foreach my $note ( values %{ $self->notes } ) {
-            $self->logger->debugf('Comparing [%s] to [%s]', $note->file->stringify, $f->stringify); 
+            $self->logger->debugf( 'Comparing [%s] to [%s]', $note->file->stringify, $f->stringify );
             if ( $note->file eq $f ) {
                 $is_known = 1;
                 last;
             }
         }
-        if (!$is_known) {
-            $self->logger->info("New local file [$f]");
-            my $content = $f->slurp; # TODO: iomode + encoding
+        if ( !$is_known ) {
+            $self->logger->info( "Found new local file [$f]" );
+            my $content = $f->slurp;    # TODO: iomode + encoding
             say $content;
             my $note = App::SimplenoteSync::Note->new(
                 createdate => $f->stat->ctime,
@@ -204,11 +209,15 @@ sub get_local_notes {
                 systemtags => ['markdown'],
                 file       => $f,
             );
-            $self->put_note($note);
+            $self->put_note( $note );
+            $new_notes++;
         }
     }
-    
+
     $self->_write_sync_db;
+    $self->logger->infof( 'New files: ' . $new_notes );
+    $self->logger->infof( 'Updated files: ' . $changed_notes );
+
 }
 
 no Moose;

@@ -22,7 +22,7 @@ my $opt = {};
 
 sub get_opts {
     my $getopt = GetOptions( $opt, 'help|h', 'longhelp|H', 'debug|d!', 'trial|t!', 'version|v',
-        'allow_server_updates!', 'allow_local_updates!', 'email=s', 'password=s' );
+        'allow_server_updates!', 'allow_local_updates!', 'email=s', 'password=s', 'quiet|q!' );
 
     if ( $getopt == 0 or defined $opt->{help} ) {
         pod2usage;
@@ -50,11 +50,7 @@ sub get_logger {
     # TODO interactive/background
     $logger = Log::Dispatch->new(
         outputs => [
-            [
-                'Screen::Color',
-                min_level => $log_level,
-                newline   => 1,
-            ],
+            
             [
                 'Syslog',
                 min_level => $log_level,
@@ -63,6 +59,16 @@ sub get_logger {
         ],
     );
 
+    if (!$opt->{quiet}) {
+        require Log::Dispatch::Screen::Color;
+        $logger->add(
+            Log::Dispatch::Screen::Color->new(
+                # never log a ton of crap to the screen, it will break progress
+                min_level => 'info', 
+                newline   => 1,
+        ));
+    }
+    
     if ( $opt->{debug} ) {
         require Log::Dispatch::File;
         require DateTime;
@@ -100,17 +106,23 @@ sub get_config {
         }
     }
 
-    $opt->{storage_opts} = $config->{storage};
-
-    if ( !$opt->{storage_opts}->{sync_db} ) {
-        $opt->{storage_opts}->{sync_db} =
-          Path::Class::File->new( File::BaseDir->cache_home("$PROGNAME.yaml") );
+    my $data_dir = Path::Class::Dir->new( File::BaseDir->data_home($PROGNAME) );
+    if (! -e $data_dir) {
+        $data_dir->mkpath
+            or die "Failed to create data dir: $data_dir: $!\n";
+    }
+    
+    $opt->{sync_db} = $data_dir->file('sync.yaml');
+    
+    if ( !$opt->{notes_dir} ) {
+        $opt->{notes_dir} = Path::Class::Dir->new( $ENV{HOME} . '/Notes' );
     }
 
-    if ( !$opt->{storage_opts}->{sync_dir} ) {
-        $opt->{storage_opts}->{sync_dir} = Path::Class::Dir->new( $ENV{HOME} . '/Notes' );
+    if (! -e $opt->{notes_dir}) {
+        $opt->{notes_dir}->mkpath
+            or die "Failed to create notes dir: ". $opt->{notes_dir} .": $!\n";
     }
-
+    
     if ( !$opt->{debug} ) {
         return;
     }
@@ -119,11 +131,12 @@ sub get_config {
     foreach my $key ( keys %$opt ) {
         my $value = $opt->{$key};
         if ( $key eq 'password' ) {
-            $value = '***REDACTED***';
+            $value = '******';
         }
         $logger->debug("$key: [$value]");
     }
     $logger->debug('===== End Options ======');
+    return;
 }
 
 get_opts;
