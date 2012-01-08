@@ -106,23 +106,6 @@ sub get_config {
         }
     }
 
-    my $data_dir = Path::Class::Dir->new( File::BaseDir->data_home($PROGNAME) );
-    if (! -e $data_dir) {
-        $data_dir->mkpath
-            or die "Failed to create data dir: $data_dir: $!\n";
-    }
-    
-    $opt->{sync_db} = $data_dir->file('sync.yaml');
-    
-    if ( !$opt->{notes_dir} ) {
-        $opt->{notes_dir} = Path::Class::Dir->new( $ENV{HOME} . '/Notes' );
-    }
-
-    if (! -e $opt->{notes_dir}) {
-        $opt->{notes_dir}->mkpath
-            or die "Failed to create notes dir: ". $opt->{notes_dir} .": $!\n";
-    }
-    
     if ( !$opt->{debug} ) {
         return;
     }
@@ -145,8 +128,9 @@ get_config;
 
 my $app = App::SimplenoteSync->new($opt);
 
-# get local notes
-my $notes = $app->get_local_notes;
+my $notes = $app->sync_notes;
+
+$app->sync_report;
 
 __END__
 

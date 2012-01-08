@@ -7,25 +7,42 @@ package App::SimplenoteSync::Note;
 use v5.10;
 use Moose;
 use MooseX::Types::Path::Class;
+use namespace::autoclean;
 
 extends 'WebService::Simplenote::Note';
+
+has '+title' => (
+#    is  => 'rw',
+#    isa => 'Str',
+    trigger => \&title_to_filename,
+);
 
 has file => (
     is     => 'rw',
     isa    => 'Path::Class::File',
     coerce => 1,
+    trigger => \&is_markdown,
 );
 
-has file_extensions => (
+has file_extension => (
     is        => 'ro',
     isa       => 'HashRef',
-    metaclass => 'DoNotSerialize',
+    traits    => ['DoNotSerialize'],
     default   => sub {
         {
             default  => 'txt',
             markdown => 'mkdn',
         };
     }
+);
+
+# XXX should we serialise this?
+has notes_dir => (
+    is        => 'ro',
+    isa       => 'Path::Class::Dir',
+    traits    => ['DoNotSerialize'], 
+    required  => 1,
+    default   => sub { return $_[0]->file->dir },
 );
 
 MooseX::Storage::Engine->add_custom_type_handler(
@@ -35,23 +52,49 @@ MooseX::Storage::Engine->add_custom_type_handler(
     )
 );
 
-# Convert note's title into file
-sub title_to_filename {
-    my ( $self, $title ) = @_;
-
-    # TODO trim
-    my $file = $self->sync_dir->file( "$title.txt" );
-    $self->logger->debug( "Title [$title] => File [$file]" );
-    return $file;
+# set the markdown systemtag if the file has a markdown extension
+sub is_markdown {
+    my $self = shift;
+    
+    # TODO an array of possibilities? e.g. mkdn, markdown, md
+    # maybe from system mime info?
+    my $ext = $self->file_extension->{markdown};
+    warn "Looking for '$ext'\n";
+    warn $self->file;
+    if ($self->file =~ m/\.$ext$/) {
+        $self->systemtags(['markdown']);
+        warn "IS MARKDOWN\n";
+    }
+    
+    return 1;
 }
 
-# Convert filename into title and unescape special characters
-sub filename_to_title {
-    my ( $self, $file ) = @_;
-    my $title = $file->basename;
-    $title =~ s/\.txt$//;
-    $self->logger->debug( "File [$file] => Title [$title]" );
-    return $title;
+# Convert note's title into file
+sub title_to_filename {
+    my ( $self, $title, $old_title ) = @_;
+
+    # don't change if already set
+    if (defined $self->file) {
+        return;
+    }
+    
+    # TODO trim
+    my $file = $title;
+    # non-word to underscore
+    $file =~ s/\W/_/g;
+    $file .= '.';
+    
+    if (grep '/markdown/', @{$self->systemtags}) {
+        $file .= $self->file_extension->{markdown};
+        warn "TtoF is markdown\n";
+    } else {
+        $file .= $self->file_extension->{default};
+        warn "TtoF is txt\n";
+    }
+
+    $self->file( $self->notes_dir->file($file) );
+    
+    return 1;
 }
 
 sub time_thingy {
@@ -77,7 +120,6 @@ sub time_thingy {
     # $d[3], $d[2], $d[1], $d[0];
 }
 
-no Moose;
 __PACKAGE__->meta->make_immutable;
 
 1;
