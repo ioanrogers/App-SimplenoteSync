@@ -8,12 +8,12 @@ use Path::Class;
 use JSON;
 
 my $date = DateTime->new(
-    year => 2012,
+    year  => 2012,
     month => 1,
-    day => 1,
+    day   => 1,
 );
 
-my $notes_dir = Path::Class::Dir->new('.');
+my $notes_dir = Path::Class::Dir->new( '.' );
 
 my $note = App::SimplenoteSync::Note->new(
     createdate => $date->epoch,
@@ -22,12 +22,12 @@ my $note = App::SimplenoteSync::Note->new(
     content    => "# Some Content #\n This is a test",
 );
 
-ok( defined $note,                              'new() returns something' );
-ok( $note->isa('App::SimplenoteSync::Note'), '... the correct class' );
+ok( defined $note,                             'new() returns something' );
+ok( $note->isa( 'App::SimplenoteSync::Note' ), '... the correct class' );
 
-cmp_ok($note->title, 'eq', 'Some Content', 'Title is correct');
+cmp_ok( $note->title, 'eq', 'Some Content', 'Title is correct' );
 
-ok( my $json_str = $note->freeze, 'Serialise note to JSON' );
-ok( my $note_from_json = decode_json $json_str, '...JSON is valid');
-ok( my $note_thawed = App::SimplenoteSync::Note->thaw($json_str), '...can deserialise');
+ok( my $json_str       = $note->freeze,                                'Serialise note to JSON' );
+ok( my $note_from_json = decode_json $json_str,                        '...JSON is valid' );
+ok( my $note_thawed    = App::SimplenoteSync::Note->thaw( $json_str ), '...can deserialise' );
 

@@ -117,7 +117,7 @@ sub _check_notes_dir {
 sub _build_metadata_dir {
     my $self = shift;
 
-    my $data_dir = Path::Class::Dir->new( File::BaseDir->data_home('simplenotesync') );
+    my $data_dir = Path::Class::Dir->new( File::BaseDir->data_home( 'simplenotesync' ) );
     if ( !-e $data_dir ) {
         $data_dir->mkpath
           or die "Failed to create data dir: $data_dir: $!\n";
@@ -135,15 +135,15 @@ sub _read_note_metadata {
 
     my $metadata;
     try {
-        $metadata = LoadFile($meta_file);
+        $metadata = LoadFile( $meta_file );
     };
-    
+
     if ( !$metadata ) {
-        $self->logger->debug('No metadata found');
+        $self->logger->debug( 'No metadata found' );
         return;
     }
 
-    foreach my $key (keys %{$metadata} ) {
+    foreach my $key ( keys %{$metadata} ) {
         $note->$key( $metadata->{$key} );
     }
 
@@ -180,11 +180,10 @@ sub _write_note_metadata {
 sub _get_note {
     my ( $self, $key ) = @_;
 
-    my $original_note = $self->simplenote->get_note($key);
+    my $original_note = $self->simplenote->get_note( $key );
 
     # 'cast' to our note type
-    my $note =
-      App::SimplenoteSync::Note->new( { %{$original_note}, notes_dir => $self->notes_dir } );
+    my $note = App::SimplenoteSync::Note->new( { %{$original_note}, notes_dir => $self->notes_dir } );
 
     say $note->title;
     say $note->file;
@@ -192,7 +191,7 @@ sub _get_note {
         return;
     }
 
-    my $fh = $note->file->open('w');
+    my $fh = $note->file->open( 'w' );
     $fh->print( $note->content );
     $fh->close;
 
@@ -203,7 +202,7 @@ sub _get_note {
     #utime $create, $modify, $filename;
     $self->notes->{ $note->key } = $note;
 
-    $self->_write_note_metadata($note);
+    $self->_write_note_metadata( $note );
 
     return 1;
 }
@@ -229,9 +228,9 @@ sub _delete_note {
 sub _put_note {
     my ( $self, $note ) = @_;
 
-    my $new_key = $self->simplenote->put_note($note);
-    if ($new_key) {
-        $note->key($new_key);
+    my $new_key = $self->simplenote->put_note( $note );
+    if ( $new_key ) {
+        $note->key( $new_key );
     }
 
     $self->{notes}->{ $note->key } = $note;
@@ -250,35 +249,35 @@ sub _merge_conflicts {
 sub _merge_local_and_remote_lists {
     my ( $self, $remote_notes ) = @_;
 
-    $self->logger->debug("Comparing local and remote lists");
+    $self->logger->debug( "Comparing local and remote lists" );
     while ( my ( $key, $note ) = each $remote_notes ) {
         if ( exists $self->notes->{$key} ) {
 
             # which is newer?
-            $self->logger->debug("[$key] exists locally and remotely");
+            $self->logger->debug( "[$key] exists locally and remotely" );
 
             # TODO check if either side has trashed this note
             given ( DateTime->compare( $note->modifydate, $self->notes->{$key}->modifydate ) ) {
-                when (0) {
+                when ( 0 ) {
 
                     # TODO check for changed tags which don't change modifydate
-                    $self->logger->debug("[$key] not modified");
+                    $self->logger->debug( "[$key] not modified" );
                 }
-                when (1) {
-                    $self->logger->debug("[$key] remote note is newer");
-                    $self->_get_note($key);
+                when ( 1 ) {
+                    $self->logger->debug( "[$key] remote note is newer" );
+                    $self->_get_note( $key );
                     $self->stats->{update_remote}++;
                 }
-                when (-1) {
-                    $self->logger->debug("[$key] local note is newer");
-                    $self->_put_note($note);
+                when ( -1 ) {
+                    $self->logger->debug( "[$key] local note is newer" );
+                    $self->_put_note( $note );
                     $self->stats->{update_local}++;
                 }
             }
         } else {
-            $self->logger->debug("[$key] does not exist locally");
+            $self->logger->debug( "[$key] does not exist locally" );
             if ( !$note->deleted ) {
-                $self->_get_note($key);
+                $self->_get_note( $key );
             }
         }
     }
@@ -293,17 +292,17 @@ sub _update_dates {
     my $mod_time = DateTime->from_epoch( epoch => $file->stat->mtime );
 
     given ( DateTime->compare( $mod_time, $note->modifydate ) ) {
-        when (0) {
+        when ( 0 ) {
 
             # no change
             return;
         }
-        when (1) {
+        when ( 1 ) {
 
             # file has changed
-            $note->modifydate($mod_time);
+            $note->modifydate( $mod_time );
         }
-        when (-1) {
+        when ( -1 ) {
             die "File is older than sync db record?? Don't know what to do!\n";
         }
     }
@@ -321,7 +320,7 @@ sub _process_local_notes {
 
         # TODO: use only files with set file extensions
 
-        $self->logger->debug("Checking [$f]");
+        $self->logger->debug( "Checking [$f]" );
 
         #$self->logger->info("Found new local file [$f]");
         my $content = $f->slurp;    # TODO: iomode + encoding
@@ -334,24 +333,25 @@ sub _process_local_notes {
             notes_dir  => $self->notes_dir,
         );
 
-        if ( !$self->_read_note_metadata($note) ) {
+        if ( !$self->_read_note_metadata( $note ) ) {
 
             # don't have a key for it, assume is new
             # we could attempt to identify file remotely based on title
             # later on, but we don't
-            $self->_put_note($note);
-            $self->_write_note_metadata($note);
+            $self->_put_note( $note );
+            $self->_write_note_metadata( $note );
             $self->stats->{new_local}++;
         }
+
         # add note to list
         $self->notes->{ $note->key } = $note;
     }
-    
+
     return 1;
 }
 
 sub sync_notes {
-    my ($self) = @_;
+    my ( $self ) = @_;
 
     # then look for status of local notes
     $self->_process_local_notes;
@@ -362,7 +362,7 @@ sub sync_notes {
 
         # if there are any notes, they will need to be merged
         # as simplenote doesn't store title or filename info
-        $self->_merge_local_and_remote_lists($remote_notes);
+        $self->_merge_local_and_remote_lists( $remote_notes );
     }
 
 }
@@ -370,7 +370,6 @@ sub sync_notes {
 sub sync_report {
     my $self = shift;
 
-    
     $self->logger->infof( 'New local files: ' . $self->stats->{new_local} );
     $self->logger->infof( 'Updated local files: ' . $self->stats->{update_local} );
 

@@ -12,23 +12,24 @@ use namespace::autoclean;
 extends 'WebService::Simplenote::Note';
 
 has '+title' => (
-#    is  => 'rw',
-#    isa => 'Str',
+
+    #    is  => 'rw',
+    #    isa => 'Str',
     trigger => \&title_to_filename,
 );
 
 has file => (
-    is     => 'rw',
-    isa    => 'Path::Class::File',
-    coerce => 1,
+    is      => 'rw',
+    isa     => 'Path::Class::File',
+    coerce  => 1,
     trigger => \&is_markdown,
 );
 
 has file_extension => (
-    is        => 'ro',
-    isa       => 'HashRef',
-    traits    => ['DoNotSerialize'],
-    default   => sub {
+    is      => 'ro',
+    isa     => 'HashRef',
+    traits  => ['DoNotSerialize'],
+    default => sub {
         {
             default  => 'txt',
             markdown => 'mkdn',
@@ -38,11 +39,11 @@ has file_extension => (
 
 # XXX should we serialise this?
 has notes_dir => (
-    is        => 'ro',
-    isa       => 'Path::Class::Dir',
-    traits    => ['DoNotSerialize'], 
-    required  => 1,
-    default   => sub { return $_[0]->file->dir },
+    is       => 'ro',
+    isa      => 'Path::Class::Dir',
+    traits   => ['DoNotSerialize'],
+    required => 1,
+    default  => sub { return $_[0]->file->dir },
 );
 
 MooseX::Storage::Engine->add_custom_type_handler(
@@ -55,17 +56,17 @@ MooseX::Storage::Engine->add_custom_type_handler(
 # set the markdown systemtag if the file has a markdown extension
 sub is_markdown {
     my $self = shift;
-    
+
     # TODO an array of possibilities? e.g. mkdn, markdown, md
     # maybe from system mime info?
     my $ext = $self->file_extension->{markdown};
     warn "Looking for '$ext'\n";
     warn $self->file;
-    if ($self->file =~ m/\.$ext$/) {
-        $self->systemtags(['markdown']);
+    if ( $self->file =~ m/\.$ext$/ ) {
+        $self->systemtags( ['markdown'] );
         warn "IS MARKDOWN\n";
     }
-    
+
     return 1;
 }
 
@@ -74,17 +75,18 @@ sub title_to_filename {
     my ( $self, $title, $old_title ) = @_;
 
     # don't change if already set
-    if (defined $self->file) {
+    if ( defined $self->file ) {
         return;
     }
-    
+
     # TODO trim
     my $file = $title;
+
     # non-word to underscore
     $file =~ s/\W/_/g;
     $file .= '.';
-    
-    if (grep '/markdown/', @{$self->systemtags}) {
+
+    if ( grep '/markdown/', @{ $self->systemtags } ) {
         $file .= $self->file_extension->{markdown};
         warn "TtoF is markdown\n";
     } else {
@@ -92,8 +94,8 @@ sub title_to_filename {
         warn "TtoF is txt\n";
     }
 
-    $self->file( $self->notes_dir->file($file) );
-    
+    $self->file( $self->notes_dir->file( $file ) );
+
     return 1;
 }
 
