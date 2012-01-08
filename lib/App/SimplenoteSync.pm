@@ -270,7 +270,7 @@ sub _merge_local_and_remote_lists {
                 }
                 when ( -1 ) {
                     $self->logger->debug( "[$key] local note is newer" );
-                    $self->_put_note( $note );
+                    $self->_put_note( $self->notes->{$key} );
                     $self->stats->{update_local}++;
                 }
             }
