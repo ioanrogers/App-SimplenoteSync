@@ -257,10 +257,10 @@ sub _merge_local_and_remote_lists {
             $self->logger->debug( "[$key] exists locally and remotely" );
 
             # TODO check if either side has trashed this note
+            # TODO changed tags don't change modifydate
+            # TODO versions and merging
             given ( DateTime->compare( $note->modifydate, $self->notes->{$key}->modifydate ) ) {
                 when ( 0 ) {
-
-                    # TODO check for changed tags which don't change modifydate
                     $self->logger->debug( "[$key] not modified" );
                 }
                 when ( 1 ) {

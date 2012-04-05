@@ -1,5 +1,5 @@
 .build
-WebService-*
+App-*
 *~
 *.log
 
