@@ -2,9 +2,6 @@ package App::SimplenoteSync::Note;
 
 # ABSTRACT: stores notes in plain files,
 
-# TODO: need to compare information between local and remote files when same 
-# title in both (e.g. simplenotesync.db lost, or collision)
-
 use v5.10;
 use Moose;
 use MooseX::Types::Path::Class;
@@ -121,18 +118,3 @@ sub time_thingy {
 __PACKAGE__->meta->make_immutable;
 
 1;
-
-=head1 FEATURES
-
-* Bidirectional synchronization between the Simplenote web site and a local
-  directory of text files on your computer
-
-* The ability to manipulate your notes (via the local text files) using other
-  applications (e.g. [Notational Velocity](http://notational.net/) if you use
-  "Plain Text Files" for storage, shell scripts, AppleScript, 
-  [TaskPaper](http://www.hogbaysoftware.com/products/taskpaper), etc.) -
-  you're limited only by your imagination
-  
-  * Certain characters are prohibited in filenames (:,\,/) - if present in the
-  title, they are stripped out. (#TODO should be dependent on filesystem, surely?)
-  

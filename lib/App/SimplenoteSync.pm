@@ -365,6 +365,11 @@ __PACKAGE__->meta->make_immutable;
 
 1;
 
+=head1 FEATURES
+
+* Bidirectional synchronization between the Simplenote web site and a local
+  directory of text files on your computer
+     
 =head1 LIMITATIONS
 
 * If the simplenotesync.db file is lost, SimplenoteSync.pl is currently unable
@@ -376,6 +381,13 @@ __PACKAGE__->meta->make_immutable;
   share the same filename. If you have two notes with the same title, only one
   will be downloaded. I suggest changing the title of the other note.
 
+* Certain characters are prohibited in filenames (:,\,/) - if present in the
+  title, they are stripped out. (#TODO should be dependent on filesystem, surely?)
+  
+* Simplenote supports multiple notes with the same title, but two files cannot
+  share the same filename. If you have two notes with the same title, only one
+  will be downloaded. I suggest changing the title of the other note.
+  
 =head1 TROUBLESHOOTING
 
 Optionally, you can enable or disable writing changes to either the local

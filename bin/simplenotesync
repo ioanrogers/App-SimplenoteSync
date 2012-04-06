@@ -21,7 +21,7 @@ our $PROGNAME = 'simplenotesync';
 my $opt = {};
 
 sub get_opts {
-    my $getopt = GetOptions( $opt, 'help|h', 'longhelp|H', 'debug|d!', 'trial|t!', 'version|v',
+    my $getopt = GetOptions( $opt, 'help|h', 'man', 'debug|d!', 'version|v',
         'allow_server_updates!', 'allow_local_updates!', 'email=s', 'password=s', 'quiet|q!' );
 
     if ( $getopt == 0 or defined $opt->{help} ) {
@@ -34,8 +34,8 @@ sub get_opts {
         exit;
     }
 
-    if ( defined $opt->{longhelp} ) {
-        pod2usage 1;
+    if ( defined $opt->{man} ) {
+        pod2usage(-verbose => 2);
     }
     return 1;
 }
@@ -63,7 +63,6 @@ sub get_logger {
         require Log::Dispatch::Screen::Color;
         $logger->add(
             Log::Dispatch::Screen::Color->new(
-                # never log a ton of crap to the screen, it will break progress
                 min_level => 'info', 
                 newline   => 1,
         ));
@@ -134,41 +133,70 @@ $app->sync_report;
 
 __END__
 
+=head1 SYNOPSIS
+ 
+simplenotesync [options] [pathname]
+ 
+ Options:
+   --help     -h           brief help message
+   --man                   full documentation
+   --version -v            display program and library version
+   --debug   -d            write debug output to a logfile in current dir
+   --quiet   -q            log nothing
+   --email                 email used for simplenote account
+   --password              password used for simplenote account
+   --allow_server_updates  don't modify notes on server
+   --allow_local_updates   don't modify notes locally
+
+  [pathname] is the local notes folder to syncronise with.
+  
+  Everything is optional and can be specified in the config file. See manual.
+  
 =head1 DESCRIPTION
 
 After specifying a folder to store local text files, and the email address and
-password associated with your Simplenote account, SimplenoteSync will attempt
+password associated with your Simplenote account, C<simplenotesync> will attempt
 to synchronize the information in both places.
-
-Sync information is stored in "simplenotesync.db". If this file is lost,
-SimplenoteSync will have to attempt to look for "collisions" between local
-files and existing notes. When performing the first synchronization, it's best
-to start with an empty local folder (or an empty collection of notes on
-Simplenote), and then start adding files (or notes) afterwards.
 
 =head1 WARNING
 
 Please note that this software is still in development stages --- I STRONGLY
 urge you to backup all of your data before running to ensure nothing is lost.
-If you run SimplenoteSync on an empty local folder without a
-"simplenotesync.db" file, the net result will be to copy the remote notes to
-the local folder, effectively performing a backup.
+If you run C<simplenotesync> on an empty local folder without the net result will 
+be to copy the remote notes to the local folder, effectively performing a backup.
+
+=head1 CONFIGURATION
+
+TODO x-platform!
+
+C<simplenotesync> can optionally use a config file. Create a file called 
+F<simplenotesync.ini> in your config dir, usually /~.config.
+
+It is an ini file, supporting the following keys:
+  
+  email, password, allow_server_updates, allow_local_updates
 
 =head1 KNOWN ISSUES
 
-* it's probably not very efficient and might really bog down with large
-  numbers of notes
+=over
 
-* renaming notes or text files causes it to be treated as a new note -
-  probably not all bad, but not sure what else to do. For now, you'll have to
-  manually delete the old copy
+=item
+
+it's probably not very efficient and might really bog down with large numbers of notes
+
+=item 
+
+renaming notes or text files causes it to be treated as a new note;
+probably not all bad, but not sure what else to do. For now, you'll have to
+manually delete the old copy
+
+=back
 
 =head1 FAQ
 
-* Why can I download notes from Simplenote, but local notes aren't being
-  uploaded?
-
 =over
+
+=item B<Why can I download notes from Simplenote, but local notes aren't being uploaded?>
 
 Do the text files end in ".txt"? For documents to be recognized as text files
 to be uploaded, they have to have that file extension. *Unless* you have
@@ -178,13 +206,8 @@ Text files can't be located in subdirectories - this script does not (by
 design) recurse folders looking for files (since they shouldn't be anywhere
 but the specified directory).
 
-=back
-
-* When my note is downloaded from Simplenote and then changed locally, I end
-  up with two copies of the first line (one shorter than the other) - what
-  gives?
-
-=over
+=item B<When my note is downloaded from Simplenote and then changed locally, I end
+  up with two copies of the first line (one shorter than the other) - what gives?>
 
 If the first line of a note is too long to become the filename, it is trimmed
 to an appropriate length. To prevent losing data, the full line is preserved
@@ -193,11 +216,7 @@ becomes the first line (which is trimmed), and the original first line is now
 the third line (counting the blank line in between). Your only alternatives
 are to shorten the first line, split it in two, or to create a short title
 
-=back
-
-* If I rename a note, what happens?
-
-=over
+=item B<If I rename a note, what happens?>
 
 If you rename a note on Simplenote by changing the first line, a new text file
 will be created and the old one will be deleted, preserving the original
@@ -208,3 +227,13 @@ of a "rename" going on - simply the recognition that an old note was deleted
 and a new one exists.
 
 =back
+
+=head1 SEE ALSO
+
+Designed for use with Simplenote:
+
+<http://www.simplenoteapp.com/>
+
+Based on SimplenoteSync:
+
+<http://fletcherpenney.net/other_projects/simplenotesync/>
