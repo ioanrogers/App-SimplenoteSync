@@ -111,18 +111,19 @@ sub _read_note_metadata {
 
     my @attrs = listfattr( $note->file );
     if ( !@attrs ) {
+
         # no attrs probably means a new file
         $self->logger->debug( 'No metadata found' );
         return;
     }
-    
+
     foreach my $attr ( @attrs ) {
-        $self->logger->debugf("attr: $attr");
+        $self->logger->debugf( "attr: $attr" );
         next if $attr !~ /^simplenote\.(\w+)$/;
         my $key = $1;
-        my $value = getfattr($note->file, $attr);
-        
-        if ($key eq 'systemtags' || $key eq 'tags') {
+        my $value = getfattr( $note->file, $attr );
+
+        if ( $key eq 'systemtags' || $key eq 'tags' ) {
             my @tags = split ',', $value;
             $note->$key( \@tags );
         } else {
@@ -146,13 +147,13 @@ sub _write_note_metadata {
     # XXX strip empty tags?
     my $metadata = {
         'simplenote.key'        => $note->key,
-        'simplenote.tags'       => join (',', @{$note->tags}),
-        'simplenote.systemtags' => join (',', @{$note->systemtags}),
+        'simplenote.tags'       => join( ',', @{ $note->tags } ),
+        'simplenote.systemtags' => join( ',', @{ $note->systemtags } ),
     };
 
-    foreach my $key (keys $metadata) {
+    foreach my $key ( keys $metadata ) {
         setfattr( $note->file, $key, $metadata->{$key} )
-            or $self->logger->errorf( 'Error writing note metadata for [%s]', $note->file->basename );
+          or $self->logger->errorf( 'Error writing note metadata for [%s]', $note->file->basename );
     }
 
     return 1;
@@ -239,9 +240,12 @@ sub _merge_local_and_remote_lists {
             # TODO changed tags don't change modifydate
             # TODO versions and merging
             # No nanoseconds for utime
-            $note->modifydate->set_nanosecond(0);
-            $self->logger->debugf( 'Comparing dates: remote [%s] // local [%s]',
-                $note->modifydate->iso8601, $self->notes->{$key}->modifydate->iso8601 );
+            $note->modifydate->set_nanosecond( 0 );
+            $self->logger->debugf(
+                'Comparing dates: remote [%s] // local [%s]',
+                $note->modifydate->iso8601,
+                $self->notes->{$key}->modifydate->iso8601
+            );
             given ( DateTime->compare_ignore_floating( $note->modifydate, $self->notes->{$key}->modifydate ) ) {
                 when ( 0 ) {
                     $self->logger->debug( "[$key] not modified" );

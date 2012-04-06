@@ -9,9 +9,7 @@ use namespace::autoclean;
 
 extends 'WebService::Simplenote::Note';
 
-has '+title' => (
-    trigger => \&title_to_filename,
-);
+has '+title' => ( trigger => \&title_to_filename, );
 
 has file => (
     is      => 'rw',
@@ -55,7 +53,7 @@ sub is_markdown {
     # TODO an array of possibilities? e.g. mkdn, markdown, md
     # maybe from system mime info?
     my $ext = $self->file_extension->{markdown};
-    
+
     if ( $self->file =~ m/\.$ext$/ ) {
         $self->systemtags( ['markdown'] );
     }
@@ -81,10 +79,10 @@ sub title_to_filename {
 
     if ( grep '/markdown/', @{ $self->systemtags } ) {
         $file .= $self->file_extension->{markdown};
-        $self->logger->debug('Note is markdown');
+        $self->logger->debug( 'Note is markdown' );
     } else {
         $file .= $self->file_extension->{default};
-        $self->logger->debug('Note is plain text');
+        $self->logger->debug( 'Note is plain text' );
     }
 
     $self->file( $self->notes_dir->file( $file ) );
