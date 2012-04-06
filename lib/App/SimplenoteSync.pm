@@ -1,13 +1,11 @@
 package App::SimplenoteSync;
 
-# ABSTRACT: access and sync with simplenoteapp.com
+# ABSTRACT: Synchronise text notes with simplenoteapp.com
 
 # TODO: How to handle simultaneous edits?
 # TODO: Windows compatibility?? This has not been tested AT ALL yet
 # TODO: Further testing on Linux - mainly file creation time
-# TODO: use filesystem xattr for metadata storage if available
 # XXX: maybe hash file content?
-# XXX: current metadata files don't allow foro multiple notes dirs. Do I care??
 
 use v5.10;
 use Moose;
@@ -145,7 +143,7 @@ sub _write_note_metadata {
     $self->logger->debugf( 'Writing note metadata for [%s]', $note->file->basename );
 
     # XXX only write if changed? Add a dirty attr?
-    
+    # XXX strip empty tags?
     my $metadata = {
         'simplenote.key'        => $note->key,
         'simplenote.tags'       => join (',', @{$note->tags}),
@@ -168,8 +166,6 @@ sub _get_note {
     # 'cast' to our note type
     my $note = App::SimplenoteSync::Note->new( { %{$original_note}, notes_dir => $self->notes_dir } );
 
-    say $note->title;
-    say $note->file;
     if ( !$self->allow_local_updates ) {
         return;
     }
@@ -242,7 +238,11 @@ sub _merge_local_and_remote_lists {
             # TODO check if either side has trashed this note
             # TODO changed tags don't change modifydate
             # TODO versions and merging
-            given ( DateTime->compare( $note->modifydate, $self->notes->{$key}->modifydate ) ) {
+            # No nanoseconds for utime
+            $note->modifydate->set_nanosecond(0);
+            $self->logger->debugf( 'Comparing dates: remote [%s] // local [%s]',
+                $note->modifydate->iso8601, $self->notes->{$key}->modifydate->iso8601 );
+            given ( DateTime->compare_ignore_floating( $note->modifydate, $self->notes->{$key}->modifydate ) ) {
                 when ( 0 ) {
                     $self->logger->debug( "[$key] not modified" );
                 }

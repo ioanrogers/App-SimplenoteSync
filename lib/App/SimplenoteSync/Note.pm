@@ -13,9 +13,6 @@ use namespace::autoclean;
 extends 'WebService::Simplenote::Note';
 
 has '+title' => (
-
-    #    is  => 'rw',
-    #    isa => 'Str',
     trigger => \&title_to_filename,
 );
 
@@ -61,11 +58,9 @@ sub is_markdown {
     # TODO an array of possibilities? e.g. mkdn, markdown, md
     # maybe from system mime info?
     my $ext = $self->file_extension->{markdown};
-    warn "Looking for '$ext'\n";
-    warn $self->file;
+    
     if ( $self->file =~ m/\.$ext$/ ) {
         $self->systemtags( ['markdown'] );
-        warn "IS MARKDOWN\n";
     }
 
     return 1;
@@ -89,10 +84,10 @@ sub title_to_filename {
 
     if ( grep '/markdown/', @{ $self->systemtags } ) {
         $file .= $self->file_extension->{markdown};
-        warn "TtoF is markdown\n";
+        $self->logger->debug('Note is markdown');
     } else {
         $file .= $self->file_extension->{default};
-        warn "TtoF is txt\n";
+        $self->logger->debug('Note is plain text');
     }
 
     $self->file( $self->notes_dir->file( $file ) );
