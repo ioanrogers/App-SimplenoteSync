@@ -2,7 +2,8 @@ package App::SimplenoteSync::Note;
 
 # ABSTRACT: stores notes in plain files,
 
-# TODO: need to compare information between local and remote files when same title in both (e.g. simplenotesync.db lost, or collision)
+# TODO: need to compare information between local and remote files when same 
+# title in both (e.g. simplenotesync.db lost, or collision)
 
 use v5.10;
 use Moose;

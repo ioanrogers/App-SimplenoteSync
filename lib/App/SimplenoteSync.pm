@@ -9,18 +9,17 @@ package App::SimplenoteSync;
 # XXX: maybe hash file content?
 # XXX: current metadata files don't allow foro multiple notes dirs. Do I care??
 
-our $VERSION = '0.001';
-
 use v5.10;
 use Moose;
 use MooseX::Types::Path::Class;
-use namespace::autoclean;
-use YAML::Any qw/DumpFile LoadFile Dump/;
+use YAML::Any;
 use Log::Any qw//;
 use DateTime;
 use Try::Tiny;
+use File::ExtAttr ':all';
 use App::SimplenoteSync::Note;
 use WebService::Simplenote;
+use namespace::autoclean;
 
 has [ 'email', 'password' ] => (
     is       => 'ro',
@@ -76,13 +75,6 @@ has logger => (
     default  => sub { return Log::Any->get_logger },
 );
 
-has metadata_dir => (
-    is      => 'rw',
-    isa     => 'Path::Class::Dir',
-    coerce  => 1,
-    builder => '_build_metadata_dir',
-);
-
 has notes_dir => (
     is       => 'ro',
     isa      => 'Path::Class::Dir',
@@ -114,37 +106,30 @@ sub _check_notes_dir {
       or die "Sync directory [" . $self->notes_dir . "] does not exist\n";
 }
 
-sub _build_metadata_dir {
-    my $self = shift;
-
-    my $data_dir = Path::Class::Dir->new( File::BaseDir->data_home( 'simplenotesync' ) );
-    if ( !-e $data_dir ) {
-        $data_dir->mkpath
-          or die "Failed to create data dir: $data_dir: $!\n";
-    }
-
-    return $data_dir;
-}
-
 sub _read_note_metadata {
     my ( $self, $note ) = @_;
 
     $self->logger->debugf( 'Looking for metadata for [%s]', $note->file->basename );
 
-    my $meta_file = $self->metadata_dir->file( $note->file->basename );
-
-    my $metadata;
-    try {
-        $metadata = LoadFile( $meta_file );
-    };
-
-    if ( !$metadata ) {
+    my @attrs = listfattr( $note->file );
+    if ( !@attrs ) {
+        # no attrs probably means a new file
         $self->logger->debug( 'No metadata found' );
         return;
     }
-
-    foreach my $key ( keys %{$metadata} ) {
-        $note->$key( $metadata->{$key} );
+    
+    foreach my $attr ( @attrs ) {
+        $self->logger->debugf("attr: $attr");
+        next if $attr !~ /^simplenote\.(\w+)$/;
+        my $key = $1;
+        my $value = getfattr($note->file, $attr);
+        
+        if ($key eq 'systemtags' || $key eq 'tags') {
+            my @tags = split ',', $value;
+            $note->$key( \@tags );
+        } else {
+            $note->$key( $value );
+        }
     }
 
     return 1;
@@ -160,18 +145,16 @@ sub _write_note_metadata {
     $self->logger->debugf( 'Writing note metadata for [%s]', $note->file->basename );
 
     # XXX only write if changed? Add a dirty attr?
-    my $meta_file = $self->metadata_dir->file( $note->file->basename );
-
+    
     my $metadata = {
-        key        => $note->key,
-        tags       => $note->tags,
-        systemtags => $note->systemtags,
+        'simplenote.key'        => $note->key,
+        'simplenote.tags'       => join (',', @{$note->tags}),
+        'simplenote.systemtags' => join (',', @{$note->systemtags}),
     };
 
-    # XXX clobber existing
-    if ( !DumpFile( $meta_file, $metadata ) ) {
-        $self->logger->errorf( 'Error writing note metadata for [%s]', $note->file->basename );
-        return;
+    foreach my $key (keys $metadata) {
+        setfattr( $note->file, $key, $metadata->{$key} )
+            or $self->logger->errorf( 'Error writing note metadata for [%s]', $note->file->basename );
     }
 
     return 1;
