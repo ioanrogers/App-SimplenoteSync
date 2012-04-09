@@ -2,10 +2,8 @@ package App::SimplenoteSync;
 
 # ABSTRACT: Synchronise text notes with simplenoteapp.com
 
-# TODO: How to handle simultaneous edits?
-# TODO: Windows compatibility?? This has not been tested AT ALL yet
-# TODO: Further testing on Linux - mainly file creation time
-# XXX: maybe hash file content?
+# TODO: Windows compatibility? This has not been tested AT ALL yet
+# TODO: maybe hash file content to better determine if something has changed?
 
 use v5.10;
 use Moose;
@@ -53,12 +51,12 @@ has simplenote => (
         return WebService::Simplenote->new(
             email                => $self->email,
             password             => $self->password,
-            allow_server_updates => $self->allow_server_updates,
+            no_server_updates => $self->no_server_updates,
         );
     },
 );
 
-has [ 'allow_server_updates', 'allow_local_updates' ] => (
+has [ 'no_server_updates', 'no_local_updates' ] => (
     is       => 'ro',
     isa      => 'Bool',
     required => 1,
@@ -137,7 +135,7 @@ sub _read_note_metadata {
 sub _write_note_metadata {
     my ( $self, $note ) = @_;
 
-    if ( !$self->allow_local_updates ) {
+    if ( $self->no_local_updates ) {
         return;
     }
 
@@ -167,7 +165,7 @@ sub _get_note {
     # 'cast' to our note type
     my $note = App::SimplenoteSync::Note->new( { %{$original_note}, notes_dir => $self->notes_dir } );
 
-    if ( !$self->allow_local_updates ) {
+    if ( $self->no_local_updates ) {
         return;
     }
 
@@ -191,7 +189,7 @@ sub _get_note {
 
 sub _delete_note {
     my ( $self, $note ) = @_;
-    if ( !$self->allow_local_updates ) {
+    if ( $self->no_local_updates ) {
         return;
     }
 
@@ -306,12 +304,11 @@ sub _process_local_notes {
     $self->logger->infof( 'Scanning [%d] files in [%s]', $num_files, $self->notes_dir->stringify );
     while ( my $f = $self->notes_dir->next ) {
         next unless -f $f;
-
-        # TODO: use only files with set file extensions
-
-        $self->logger->debug( "Checking [$f]" );
-
-        #$self->logger->info("Found new local file [$f]");
+        
+        $self->logger->debug( "Checking local file [$f]" );
+        # TODO: configure file extensions, or use mime types?
+        next if $f !~ /\.(txt|mkdn)$/;
+        
         my $content = $f->slurp;    # TODO: iomode + encoding
 
         my $note = App::SimplenoteSync::Note->new(
@@ -370,49 +367,3 @@ sub sync_report {
 __PACKAGE__->meta->make_immutable;
 
 1;
-
-=head1 FEATURES
-
-* Bidirectional synchronization between the Simplenote web site and a local
-  directory of text files on your computer
-     
-=head1 LIMITATIONS
-
-* If the simplenotesync.db file is lost, SimplenoteSync.pl is currently unable
-  to realize that a text file and a note represent the same object --- instead
-  you should move your local text files, do a fresh sync to download all notes
-  locally, and manually replace any missing notes.
-
-* Simplenote supports multiple notes with the same title, but two files cannot
-  share the same filename. If you have two notes with the same title, only one
-  will be downloaded. I suggest changing the title of the other note.
-
-* Certain characters are prohibited in filenames (:,\,/) - if present in the
-  title, they are stripped out. (#TODO should be dependent on filesystem, surely?)
-  
-* Simplenote supports multiple notes with the same title, but two files cannot
-  share the same filename. If you have two notes with the same title, only one
-  will be downloaded. I suggest changing the title of the other note.
-  
-=head1 TROUBLESHOOTING
-
-Optionally, you can enable or disable writing changes to either the local
-directory or to the Simplenote web server. For example, if you want to attempt
-to copy files to your computer without risking your remote data, you can
-disable "$allow_server_updates". Or, you can disable "$allow_local_updates" to
-protect your local data.
-
-=head1 KNOWN ISSUES
-
-* No merging when both local and remote file are changed between syncs - this
-  might be enabled in the future
-
-=head1 SEE ALSO
-
-Designed for use with Simplenote:
-
-<http://www.simplenoteapp.com/>
-
-Based on SimplenoteSync:
-
-<http://fletcherpenney.net/other_projects/simplenotesync/>

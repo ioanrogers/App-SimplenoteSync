@@ -90,29 +90,6 @@ sub title_to_filename {
     return 1;
 }
 
-sub time_thingy {
-    my ( $self, $file ) = @_;
-
-    # my @d = gmtime( ( $file->stat) )[9] );
-    # $file{$filepath}{modify} = sprintf "%4d-%02d-%02d %02d:%02d:%02d", $d[5] + 1900, $d[4] + 1,
-    # $d[3], $d[2], $d[1], $d[0];
-
-    # #         if ( $^O =~ /darwin/i ) {
-
-    # #             # The following works on Mac OS X - need a "birth time", not ctime
-    # # created time
-    # @d = gmtime( readpipe("stat -f \"%B\" \"$filepath\"") );
-    # } else {
-
-    # #             # TODO: Need a better way to do this on non Mac systems
-    # # get file's modification time
-    # @d = gmtime( ( stat("$filepath") )[9] );
-    # }
-
-    # #         $file{$filepath}{create} = sprintf "%4d-%02d-%02d %02d:%02d:%02d", $d[5] + 1900, $d[4] + 1,
-    # $d[3], $d[2], $d[1], $d[0];
-}
-
 __PACKAGE__->meta->make_immutable;
 
 1;
