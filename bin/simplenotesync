@@ -37,6 +37,12 @@ sub get_opts {
     if ( defined $opt->{man} ) {
         pod2usage(-verbose => 2);
     }
+
+    # is there a path on the command line?
+    if (defined $ARGV[0]) {
+        $opt->{notes_dir} = $ARGV[0];
+    }
+    
     return 1;
 }
 
@@ -148,7 +154,7 @@ simplenotesync [options] [pathname]
    --allow_server_updates  don't modify notes on server
    --allow_local_updates   don't modify notes locally
 
-  [pathname] is the local notes folder to syncronise with.
+  [pathname] is the local notes folder to syncronise with. Defaults to $HOME/Notes.
   
   Everything is optional and can be specified in the config file. See manual.
   
@@ -174,7 +180,7 @@ F<simplenotesync.ini> in your config dir, usually /~.config.
 
 It is an ini file, supporting the following keys:
   
-  email, password, allow_server_updates, allow_local_updates
+  email, password, notes_dir, allow_server_updates, allow_local_updates
 
 =head1 KNOWN ISSUES
 
