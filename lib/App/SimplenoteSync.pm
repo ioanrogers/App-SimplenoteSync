@@ -183,7 +183,9 @@ sub _get_note {
     $self->notes->{ $note->key } = $note;
 
     $self->_write_note_metadata( $note );
-
+    
+    $self->stats->{new_remote}++;
+    
     return 1;
 }
 
