@@ -49,8 +49,8 @@ has simplenote => (
     default => sub {
         my $self = shift;
         return WebService::Simplenote->new(
-            email                => $self->email,
-            password             => $self->password,
+            email             => $self->email,
+            password          => $self->password,
             no_server_updates => $self->no_server_updates,
         );
     },
@@ -181,9 +181,9 @@ sub _get_note {
     $self->notes->{ $note->key } = $note;
 
     $self->_write_note_metadata( $note );
-    
+
     $self->stats->{new_remote}++;
-    
+
     return 1;
 }
 
@@ -304,11 +304,12 @@ sub _process_local_notes {
     $self->logger->infof( 'Scanning [%d] files in [%s]', $num_files, $self->notes_dir->stringify );
     while ( my $f = $self->notes_dir->next ) {
         next unless -f $f;
-        
+
         $self->logger->debug( "Checking local file [$f]" );
+
         # TODO: configure file extensions, or use mime types?
         next if $f !~ /\.(txt|mkdn)$/;
-        
+
         my $content = $f->slurp;    # TODO: iomode + encoding
 
         my $note = App::SimplenoteSync::Note->new(
