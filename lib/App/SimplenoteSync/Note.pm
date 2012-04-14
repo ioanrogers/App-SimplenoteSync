@@ -15,7 +15,7 @@ has file => (
     is      => 'rw',
     isa     => 'Path::Class::File',
     coerce  => 1,
-    trigger => \&is_markdown,
+    trigger => \&_has_markdown_ext,
 );
 
 has file_extension => (
@@ -47,15 +47,15 @@ MooseX::Storage::Engine->add_custom_type_handler(
 );
 
 # set the markdown systemtag if the file has a markdown extension
-sub is_markdown {
+sub _has_markdown_ext {
     my $self = shift;
 
     # TODO an array of possibilities? e.g. mkdn, markdown, md
     # maybe from system mime info?
     my $ext = $self->file_extension->{markdown};
 
-    if ( $self->file =~ m/\.$ext$/ ) {
-        $self->systemtags( ['markdown'] );
+    if ( $self->file =~ m/\.$ext$/ && !$self->is_markdown) {
+        $self->set_markdown;
     }
 
     return 1;

@@ -60,7 +60,7 @@ has [ 'no_server_updates', 'no_local_updates' ] => (
     is       => 'ro',
     isa      => 'Bool',
     required => 1,
-    default  => 1,
+    default  => 0,
 );
 
 has logger => (
@@ -142,13 +142,19 @@ sub _write_note_metadata {
     $self->logger->debugf( 'Writing note metadata for [%s]', $note->file->basename );
 
     # XXX only write if changed? Add a dirty attr?
-    # XXX strip empty tags?
+    # should always be a key
     my $metadata = {
         'simplenote.key'        => $note->key,
-        'simplenote.tags'       => join( ',', @{ $note->tags } ),
-        'simplenote.systemtags' => join( ',', @{ $note->systemtags } ),
     };
 
+    if ($note->has_systags) {
+        $metadata->{'simplenote.systemtags'} = $note->join_systags(',');
+    }
+    
+    if ($note->has_tags) {
+        $metadata->{'simplenote.tags'} = $note->join_tags(',');
+    }
+    
     foreach my $key ( keys $metadata ) {
         setfattr( $note->file, $key, $metadata->{$key} )
           or $self->logger->errorf( 'Error writing note metadata for [%s]', $note->file->basename );
@@ -230,6 +236,12 @@ sub _merge_local_and_remote_lists {
     my ( $self, $remote_notes ) = @_;
 
     $self->logger->debug( "Comparing local and remote lists" );
+    
+    # XXX what about notes which were deleted on the server, and are to be restored
+    # from local files? i.e key set locally, not existent remotely? How to tell
+    # if the file SHOULD be trashed? User option, perhaps --restore
+    
+    # TODO check for tag changes, which don't change date
     while ( my ( $key, $note ) = each $remote_notes ) {
         if ( exists $self->notes->{$key} ) {
 
@@ -323,8 +335,6 @@ sub _process_local_notes {
         if ( !$self->_read_note_metadata( $note ) ) {
 
             # don't have a key for it, assume is new
-            # we could attempt to identify file remotely based on title
-            # later on, but we don't
             $self->_put_note( $note );
             $self->_write_note_metadata( $note );
             $self->stats->{new_local}++;
