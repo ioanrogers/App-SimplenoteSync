@@ -203,7 +203,7 @@ method _delete_note (App::SimplenoteSync::Note $note) {
     return 1;
 }
 
-method _put_note (Webservice::Simplenote::Note $note) {
+method _put_note (App::SimplenoteSync::Note $note) {
 
     my $new_key = $self->simplenote->put_note( $note );
     if ( $new_key ) {
