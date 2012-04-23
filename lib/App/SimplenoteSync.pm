@@ -8,6 +8,7 @@ package App::SimplenoteSync;
 use v5.10;
 use Moose;
 use MooseX::Types::Path::Class;
+use Method::Signatures;
 use YAML::Any;
 use Log::Any qw//;
 use DateTime;
@@ -80,9 +81,8 @@ has notes_dir => (
     trigger  => \&_check_notes_dir,
 );
 
-sub _build_notes_dir {
-    my $self = shift;
-
+method _build_notes_dir {
+    
     my $notes_dir = Path::Class::Dir->new( $ENV{HOME}, 'Notes' );
 
     if ( !-e $notes_dir ) {
@@ -93,8 +93,7 @@ sub _build_notes_dir {
     return $notes_dir;
 }
 
-sub _check_notes_dir {
-    my $self = shift;
+method _check_notes_dir {
     if ( -d $self->notes_dir ) {
         return;
     }
@@ -102,9 +101,7 @@ sub _check_notes_dir {
       or die "Sync directory [" . $self->notes_dir . "] does not exist\n";
 }
 
-sub _read_note_metadata {
-    my ( $self, $note ) = @_;
-
+method _read_note_metadata ( App::SimplenoteSync::Note $note ) {
     $self->logger->debugf( 'Looking for metadata for [%s]', $note->file->basename );
 
     my @attrs = listfattr( $note->file );
@@ -132,9 +129,7 @@ sub _read_note_metadata {
     return 1;
 }
 
-sub _write_note_metadata {
-    my ( $self, $note ) = @_;
-
+method _write_note_metadata ( App::SimplenoteSync::Note $note ) {
     if ( $self->no_local_updates ) {
         return;
     }
@@ -163,9 +158,7 @@ sub _write_note_metadata {
     return 1;
 }
 
-sub _get_note {
-    my ( $self, $key ) = @_;
-
+method _get_note (Str $key) {
     my $original_note = $self->simplenote->get_note( $key );
 
     # 'cast' to our note type
@@ -193,8 +186,7 @@ sub _get_note {
     return 1;
 }
 
-sub _delete_note {
-    my ( $self, $note ) = @_;
+method _delete_note (App::SimplenoteSync::Note $note) {
     if ( $self->no_local_updates ) {
         return;
     }
@@ -211,8 +203,7 @@ sub _delete_note {
     return 1;
 }
 
-sub _put_note {
-    my ( $self, $note ) = @_;
+method _put_note (Webservice::Simplenote::Note $note) {
 
     my $new_key = $self->simplenote->put_note( $note );
     if ( $new_key ) {
@@ -223,18 +214,15 @@ sub _put_note {
     return 1;
 }
 
-sub _merge_conflicts {
+method merge_conflicts {
 
     # Both the local copy and server copy were changed since last sync
     # We'll merge the changes into a new master file, and flag any conflicts
     # TODO spawn some diff tool?
-    my ( $self, $key ) = @_;
 
 }
 
-sub _merge_local_and_remote_lists {
-    my ( $self, $remote_notes ) = @_;
-
+method _merge_local_and_remote_lists(HashRef $remote_notes ) {;
     $self->logger->debug( "Comparing local and remote lists" );
     
     # XXX what about notes which were deleted on the server, and are to be restored
@@ -285,9 +273,7 @@ sub _merge_local_and_remote_lists {
 }
 
 # TODO: check ctime
-sub _update_dates {
-    my ( $self, $note, $file ) = @_;
-
+method _update_dates (App::SimplenoteSync::Note $note, Path::Class::File $file ) {
     my $mod_time = DateTime->from_epoch( epoch => $file->stat->mtime );
 
     given ( DateTime->compare( $mod_time, $note->modifydate ) ) {
@@ -309,8 +295,7 @@ sub _update_dates {
     return 1;
 }
 
-sub _process_local_notes {
-    my $self = shift;
+method _process_local_notes {
     my $num_files = scalar $self->notes_dir->children( no_hidden => 1 );
 
     $self->logger->infof( 'Scanning [%d] files in [%s]', $num_files, $self->notes_dir->stringify );
@@ -347,10 +332,8 @@ sub _process_local_notes {
     return 1;
 }
 
-sub sync_notes {
-    my ( $self ) = @_;
-
-    # then look for status of local notes
+method sync_notes {
+    #  look for status of local notes
     $self->_process_local_notes;
 
     # get list of remote notes
@@ -364,9 +347,7 @@ sub sync_notes {
 
 }
 
-sub sync_report {
-    my $self = shift;
-
+method sync_report {
     $self->logger->infof( 'New local files: ' . $self->stats->{new_local} );
     $self->logger->infof( 'Updated local files: ' . $self->stats->{update_local} );
 
