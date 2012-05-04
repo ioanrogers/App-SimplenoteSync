@@ -253,7 +253,7 @@ method _merge_local_and_remote_lists(HashRef $remote_notes ) {;
             $self->logger->debug( "[$key] exists locally and remotely" );
 
             if ($remote_note->deleted) {
-                $self->logger->warn( "[$key] has been trashed remotely. Deleting local copy in [%s]",
+                $self->logger->warnf( "[$key] has been trashed remotely. Deleting local copy in [%s]",
                     $local_note->file->stringify
                 );
                 $self->_delete_note($local_note);        
@@ -290,7 +290,19 @@ method _merge_local_and_remote_lists(HashRef $remote_notes ) {;
             }
         }
     }
-
+    
+    # try the other way to catch deleted notes
+    while ( my ( $key, $local_note ) = each %{$self->notes} ) {
+         if ( !exists $remote_notes->{$key} ) {
+            # if a local file has metadata, specifically simplenote.key
+            # but doesn't exist remotely it must have been deleted there
+            $self->logger->warnf( "[$key] does not exist remotely. Deleting local copy in [%s]",
+                $local_note->file->stringify
+            );
+            $self->_delete_note($local_note);        
+         } 
+    }
+    
     return 1;
 }
 
