@@ -39,7 +39,9 @@ has stats => (
             new_local     => 0,
             new_remote    => 0,
             update_local  => 0,
-            update_remote => 0
+            update_remote => 0,
+            deleted_local => 0,
+            trash         => 0,
         };
     },
 );
@@ -198,6 +200,7 @@ method _delete_note (App::SimplenoteSync::Note $note) {
     my $removed = $note->file->remove;
     if ($removed) {
         $self->logger->debugf( 'Deleted [%s]', $note->file->stringify );
+        $self->stats->{deleted_local}++;
     } else {
         $self->logger->errorf( "Failed to delete [%s]: $!", $note->file->stringify );
     }
@@ -287,6 +290,8 @@ method _merge_local_and_remote_lists(HashRef $remote_notes ) {;
             $self->logger->debug( "[$key] does not exist locally" );
             if ( !$remote_note->deleted ) {
                 $self->_get_note( $key );
+            } else {
+                $self->stats->{trash}++;
             }
         }
     }
@@ -384,6 +389,9 @@ method sync_report {
 
     $self->logger->infof( 'New remote files: ' . $self->stats->{new_remote} );
     $self->logger->infof( 'Updated remote files: ' . $self->stats->{update_remote} );
+    
+    $self->logger->infof( 'Deleted local files: ' . $self->stats->{deleted_local} );
+    $self->logger->infof( 'Ignored remote trash: ' . $self->stats->{trash} );
 
 }
 
