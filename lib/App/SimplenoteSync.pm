@@ -6,6 +6,7 @@ package App::SimplenoteSync;
 # TODO: maybe hash file content to better determine if something has changed?
 
 use v5.10;
+use open qw(:std :utf8);
 use Moose;
 use MooseX::Types::Path::Class;
 use Method::Signatures;
@@ -167,8 +168,10 @@ method _get_note (Str $key) {
     if ( $self->no_local_updates ) {
         return;
     }
-
     my $fh = $note->file->open( 'w' );
+
+    # data from simplenote should always be utf8
+    $fh->binmode(':utf8');
     $fh->print( $note->content );
     $fh->close;
 
@@ -307,7 +310,7 @@ method _process_local_notes {
         # TODO: configure file extensions, or use mime types?
         next if $f !~ /\.(txt|mkdn)$/;
 
-        my $content = $f->slurp;    # TODO: iomode + encoding
+        my $content = $f->slurp;
 
         my $note = App::SimplenoteSync::Note->new(
             createdate => $f->stat->ctime,
