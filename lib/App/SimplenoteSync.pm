@@ -140,7 +140,7 @@ method _write_note_metadata ( App::SimplenoteSync::Note $note ) {
     # XXX only write if changed? Add a dirty attr?
     # should always be a key
     my $metadata = {
-        'simplenote.key'        => $note->key,
+        'simplenote.key' => $note->key,
     };
 
     if ($note->has_systags) {
@@ -191,17 +191,18 @@ method _get_note (Str $key) {
 
 method _delete_note (App::SimplenoteSync::Note $note) {
     if ( $self->no_local_updates ) {
+        $self->logger->warn( 'no_local_updates is set, not deleting note' );
         return;
     }
-
-    my $metadata_file = $self->metadata_dir->file( $note->key );
-    $metadata_file->remove
-      or $self->logger->warnf( 'Failed to remove metadata file: %s', $metadata_file->stringify );
-
+    
+    my $removed = $note->file->remove;
+    if ($removed) {
+        $self->logger->debugf( 'Deleted [%s]', $note->file->stringify );
+    } else {
+        $self->logger->errorf( "Failed to delete [%s]: $!", $note->file->stringify );
+    }
+    
     delete $self->notes->{ $note->key };
-
-    $note->file->remove
-      or $self->logger->errorf( 'Failed to remove note file: %s', $note->file->stringify );
 
     return 1;
 }
@@ -232,24 +233,29 @@ method _merge_local_and_remote_lists(HashRef $remote_notes ) {;
     # from local files? i.e key set locally, not existent remotely? How to tell
     # if the file SHOULD be trashed? User option, perhaps --restore
     
-    # TODO check for tag changes, which don't change date
-    while ( my ( $key, $note ) = each %$remote_notes ) {
+    while ( my ( $key, $remote_note ) = each %$remote_notes ) {
         if ( exists $self->notes->{$key} ) {
-
-            # which is newer?
+            my $local_note = $self->notes->{$key};
+            
             $self->logger->debug( "[$key] exists locally and remotely" );
 
-            # TODO check if either side has trashed this note
+            if ($remote_note->deleted) {
+                $self->logger->warn( "[$key] has been trashed remotely. Deleting local copy in [%s]",
+                    $local_note->file->stringify
+                );
+                $self->_delete_note($local_note);        
+            }
+            
             # TODO changed tags don't change modifydate
             # TODO versions and merging
-            # No nanoseconds for utime
-            $note->modifydate->set_nanosecond( 0 );
+            # which is newer?
+            $remote_note->modifydate->set_nanosecond( 0 ); # utime doesn't use nanoseconds
             $self->logger->debugf(
                 'Comparing dates: remote [%s] // local [%s]',
-                $note->modifydate->iso8601,
-                $self->notes->{$key}->modifydate->iso8601
+                $remote_note->modifydate->iso8601,
+                $local_note->modifydate->iso8601
             );
-            given ( DateTime->compare_ignore_floating( $note->modifydate, $self->notes->{$key}->modifydate ) ) {
+            given ( DateTime->compare_ignore_floating( $remote_note->modifydate, $local_note->modifydate ) ) {
                 when ( 0 ) {
                     $self->logger->debug( "[$key] not modified" );
                 }
@@ -260,13 +266,13 @@ method _merge_local_and_remote_lists(HashRef $remote_notes ) {;
                 }
                 when ( -1 ) {
                     $self->logger->debug( "[$key] local note is newer" );
-                    $self->_put_note( $self->notes->{$key} );
+                    $self->_put_note( $local_note );
                     $self->stats->{update_local}++;
                 }
             }
         } else {
             $self->logger->debug( "[$key] does not exist locally" );
-            if ( !$note->deleted ) {
+            if ( !$remote_note->deleted ) {
                 $self->_get_note( $key );
             }
         }
