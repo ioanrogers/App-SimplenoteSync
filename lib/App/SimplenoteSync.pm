@@ -208,7 +208,20 @@ method _delete_note (App::SimplenoteSync::Note $note) {
 }
 
 method _put_note (App::SimplenoteSync::Note $note) {
-
+    
+    if (!defined $note->content) {
+       my $content;
+       try {
+           $content = $note->file->slurp;
+       } catch {
+           $self->logger->error( "Failed to read file: $_" );
+           return;
+       };
+       
+       $note->content($content);
+    }
+    
+    $self->logger->infof( 'Uploading file: [%s]', $note->file->stringify );
     my $new_key = $self->simplenote->put_note( $note );
     if ( $new_key ) {
         $note->key( $new_key );
@@ -315,13 +328,10 @@ method _process_local_notes {
 
         # TODO: configure file extensions, or use mime types?
         next if $f !~ /\.(txt|mkdn)$/;
-
-        my $content = $f->slurp;
-
+        
         my $note = App::SimplenoteSync::Note->new(
             createdate => $f->stat->ctime,
             modifydate => $f->stat->mtime,
-            content    => $content,
             file       => $f,
             notes_dir  => $self->notes_dir,
         );
