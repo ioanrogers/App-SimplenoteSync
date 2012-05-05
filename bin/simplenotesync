@@ -21,20 +21,22 @@ our $PROGNAME = 'simplenotesync';
 my $opt = {};
 
 sub get_opts {
-    my $getopt = GetOptions( $opt, 'help|h', 'man', 'debug|d!', 'version|v',
-        'no_server_updates!', 'no_local_updates!', 'email=s', 'password=s', 'quiet|q!' );
+    my $getopt =
+      GetOptions($opt, 'help|h', 'man', 'debug|d!', 'version|v',
+        'no_server_updates!', 'no_local_updates!', 'email=s', 'password=s',
+        'quiet|q!');
 
-    if ( $getopt == 0 or defined $opt->{help} ) {
+    if ($getopt == 0 or defined $opt->{help}) {
         pod2usage;
     }
 
-    if ( defined $opt->{version} ) {
+    if (defined $opt->{version}) {
         printf "%s version %s [using WebService::Simplenote %s]\n", $PROGNAME,
           $App::SimplenoteSync::VERSION, $WebService::Simplenote::VERSION;
         exit;
     }
 
-    if ( defined $opt->{man} ) {
+    if (defined $opt->{man}) {
         pod2usage(-verbose => 2);
     }
 
@@ -42,21 +44,21 @@ sub get_opts {
     if (defined $ARGV[0]) {
         $opt->{notes_dir} = $ARGV[0];
     }
-    
+
     return 1;
 }
 
 sub get_logger {
 
     my $log_level = 'info';
-    if ( $opt->{debug} ) {
+    if ($opt->{debug}) {
         $log_level = 'debug';
     }
 
     # TODO interactive/background
     $logger = Log::Dispatch->new(
         outputs => [
-            
+
             [
                 'Syslog',
                 min_level => $log_level,
@@ -69,18 +71,19 @@ sub get_logger {
         require Log::Dispatch::Screen::Color;
         $logger->add(
             Log::Dispatch::Screen::Color->new(
-                min_level => 'info', 
+                min_level => 'info',
                 newline   => 1,
-        ));
+            ));
     }
-    
-    if ( $opt->{debug} ) {
+
+    if ($opt->{debug}) {
         require Log::Dispatch::File;
         require DateTime;
         my $sub = sub {
             my %p   = @_;
             my $dt  = DateTime->now;
-            my $str = sprintf '%s::%s::%s', $dt->iso8601, uc $p{level}, $p{message};
+            my $str = sprintf '%s::%s::%s', $dt->iso8601, uc $p{level},
+              $p{message};
             return $str;
         };
 
@@ -91,34 +94,33 @@ sub get_logger {
                 filename  => $PROGNAME . '_debug.log',
                 newline   => 1,
                 callbacks => $sub,
-            )
-        );
+            ));
     }
 
-    Log::Any::Adapter->set( 'Dispatch', dispatcher => $logger );
+    Log::Any::Adapter->set('Dispatch', dispatcher => $logger);
 }
 
 sub get_config {
-    my $conf_dir  = Path::Class::Dir->new( File::BaseDir->config_home );
+    my $conf_dir  = Path::Class::Dir->new(File::BaseDir->config_home);
     my $conf_file = $conf_dir->file("$PROGNAME.ini");
     $logger->debug("Reading config from $conf_file");
     my $config = Config::INI::Reader->read_file($conf_file);
 
     # merge config opts - cli opts take precedence
-    foreach my $key ( keys %{ $config->{_} } ) {
-        if ( !exists $opt->{$key} ) {
+    foreach my $key (keys %{$config->{_}}) {
+        if (!exists $opt->{$key}) {
             $opt->{$key} = $config->{_}->{$key};
         }
     }
 
-    if ( !$opt->{debug} ) {
+    if (!$opt->{debug}) {
         return;
     }
 
     $logger->debug('======= Options ========');
-    foreach my $key ( keys %$opt ) {
+    foreach my $key (keys %$opt) {
         my $value = $opt->{$key};
-        if ( $key eq 'password' ) {
+        if ($key eq 'password') {
             $value = '******';
         }
         $logger->debug("$key: [$value]");
