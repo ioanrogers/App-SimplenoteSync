@@ -226,15 +226,7 @@ method _delete_note (App::SimplenoteSync::Note $note) {
 method _put_note (App::SimplenoteSync::Note $note) {
     
     if (!defined $note->content) {
-       my $content;
-       try {
-           $content = $note->file->slurp;
-       } catch {
-           $self->logger->error( "Failed to read file: $_" );
-           return;
-       };
-       
-       $note->content($content);
+       $note->load_content || return;
     }
     
     $self->logger->infof( 'Uploading file: [%s]', $note->file->stringify );

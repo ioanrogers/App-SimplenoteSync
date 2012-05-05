@@ -5,11 +5,12 @@ package App::SimplenoteSync::Note;
 use v5.10;
 use Moose;
 use MooseX::Types::Path::Class;
+use Try::Tiny;
 use namespace::autoclean;
 
 extends 'WebService::Simplenote::Note';
 
-has '+title' => ( trigger => \&title_to_filename, );
+has '+title' => ( trigger => \&_title_to_filename, );
 
 has file => (
     is      => 'rw',
@@ -62,7 +63,7 @@ sub _has_markdown_ext {
 }
 
 # Convert note's title into file
-sub title_to_filename {
+sub _title_to_filename {
     my ( $self, $title, $old_title ) = @_;
 
     # don't change if already set
@@ -88,6 +89,23 @@ sub title_to_filename {
     $self->file( $self->notes_dir->file( $file ) );
 
     return 1;
+}
+
+sub load_content {
+    my $self = shift;
+
+    my $content;
+    
+    try {
+        $content = $self->file->slurp(iomode => '<:utf8');
+    } catch {
+        $self->logger->error( "Failed to read file: $_" );
+        return;
+    };
+     
+    $self->content($content);
+    return 1;
+           
 }
 
 __PACKAGE__->meta->make_immutable;
