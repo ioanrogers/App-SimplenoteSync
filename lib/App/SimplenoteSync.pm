@@ -238,12 +238,14 @@ method _put_note (App::SimplenoteSync::Note $note) {
     }
     
     $self->logger->infof( 'Uploading file: [%s]', $note->file->stringify );
-    my $new_key = $self->simplenote->put_note( $note );
-    if ( $new_key ) {
-        $note->key( $new_key );
+    my $key = $self->simplenote->put_note( $note );
+    
+    if ( !$key ) {
+        return;  
     }
-
-    $self->{notes}->{ $note->key } = $note;
+    
+    $note->key( $key );
+    
     return 1;
 }
 
@@ -368,14 +370,18 @@ method _process_local_notes {
 
         if ( !$self->_read_note_metadata( $note ) ) {
 
-            # don't have a key for it, assume is new
+            $self->logger->info( "Don't have a key for [$f], assuming it is new" );
             $self->_put_note( $note );
             $self->_write_note_metadata( $note );
             $self->stats->{new_local}++;
         }
 
-        # add note to list
-        $self->notes->{ $note->key } = $note;
+        if (defined $note->key) {
+            # add note to list
+            $self->notes->{ $note->key } = $note;
+        } else {
+            $self->logger->error("Skipping [%s]: failed to find a key");
+        } 
     }
 
     return 1;
