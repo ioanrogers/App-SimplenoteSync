@@ -255,8 +255,7 @@ method merge_conflicts () {
 
 }
 
-sub _merge_local_and_remote_lists(HashRef $remote_notes ) {
-    ;                       #__METHOD
+method _merge_local_and_remote_lists(HashRef $remote_notes) {
     $self->logger->debug("Comparing local and remote lists");
 
     # XXX what about notes which were deleted on the server, and are to be restored
@@ -334,8 +333,7 @@ sub _merge_local_and_remote_lists(HashRef $remote_notes ) {
 }
 
 # TODO: check ctime
-sub _update_dates (App::SimplenoteSync::Note $note, Path::Class::File $file )
-{    #__METHOD
+method _update_dates ( App::SimplenoteSync::Note $note, Path::Class::File $file ) {
     my $mod_time = DateTime->from_epoch(epoch => $file->stat->mtime);
 
     given (DateTime->compare($mod_time, $note->modifydate)) {
