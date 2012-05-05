@@ -84,7 +84,7 @@ has notes_dir => (
     trigger  => \&_check_notes_dir,
 );
 
-method _build_notes_dir () {
+method _build_notes_dir {
 
     my $notes_dir = Path::Class::Dir->new($ENV{HOME}, 'Notes');
 
@@ -96,7 +96,7 @@ method _build_notes_dir () {
     return $notes_dir;
 }
 
-method _check_notes_dir ($path) {
+method _check_notes_dir($path) {
     if (-d $self->notes_dir) {
         return;
     }
@@ -106,7 +106,7 @@ method _check_notes_dir ($path) {
       . "] does not exist and could not be created: $!\n";
 }
 
-method _read_note_metadata ( App::SimplenoteSync::Note $note ) {
+method _read_note_metadata(App::SimplenoteSync::Note $note) {
     $self->logger->debugf('Looking for metadata for [%s]',
         $note->file->basename);
 
@@ -149,7 +149,7 @@ method _read_note_metadata ( App::SimplenoteSync::Note $note ) {
     return 1;
 }
 
-method _write_note_metadata ( App::SimplenoteSync::Note $note ) {
+method _write_note_metadata(App::SimplenoteSync::Note $note) {
     if ($self->no_local_updates) {
         return;
     }
@@ -178,7 +178,7 @@ method _write_note_metadata ( App::SimplenoteSync::Note $note ) {
     return 1;
 }
 
-method _get_note (Str $key) {
+method _get_note(Str $key) {
     my $original_note = $self->simplenote->get_note($key);
 
     # 'cast' to our note type
@@ -209,7 +209,7 @@ method _get_note (Str $key) {
     return 1;
 }
 
-method _delete_note (App::SimplenoteSync::Note $note) {
+method _delete_note(App::SimplenoteSync::Note $note) {
     if ($self->no_local_updates) {
         $self->logger->warn('no_local_updates is set, not deleting note');
         return;
@@ -229,7 +229,7 @@ method _delete_note (App::SimplenoteSync::Note $note) {
     return 1;
 }
 
-method _put_note (App::SimplenoteSync::Note $note) {
+method _put_note(App::SimplenoteSync::Note $note) {
 
     if (!defined $note->content) {
         $note->load_content || return;
@@ -247,7 +247,7 @@ method _put_note (App::SimplenoteSync::Note $note) {
     return 1;
 }
 
-method merge_conflicts () {
+method merge_conflicts {
 
     # Both the local copy and server copy were changed since last sync
     # We'll merge the changes into a new master file, and flag any conflicts
@@ -333,7 +333,7 @@ method _merge_local_and_remote_lists(HashRef $remote_notes) {
 }
 
 # TODO: check ctime
-method _update_dates ( App::SimplenoteSync::Note $note, Path::Class::File $file ) {
+method _update_dates(App::SimplenoteSync::Note $note, Path::Class::File $file) {
     my $mod_time = DateTime->from_epoch(epoch => $file->stat->mtime);
 
     given (DateTime->compare($mod_time, $note->modifydate)) {
@@ -355,7 +355,7 @@ method _update_dates ( App::SimplenoteSync::Note $note, Path::Class::File $file 
     return 1;
 }
 
-method _process_local_notes () {
+method _process_local_notes {
     my $num_files = scalar $self->notes_dir->children(no_hidden => 1);
 
     $self->logger->infof('Scanning [%d] files in [%s]',
@@ -396,7 +396,7 @@ method _process_local_notes () {
     return 1;
 }
 
-method sync_notes () {
+method sync_notes {
                        #  look for status of local notes
     $self->_process_local_notes;
 
@@ -411,7 +411,7 @@ method sync_notes () {
 
 }
 
-method sync_report () {
+method sync_report {
     $self->logger->infof('New local files: ' . $self->stats->{new_local});
     $self->logger->infof(
         'Updated local files: ' . $self->stats->{update_local});
