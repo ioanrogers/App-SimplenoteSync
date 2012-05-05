@@ -27,8 +27,16 @@ has ['email', 'password'] => (
 
 has notes => (
     is      => 'rw',
+    traits  => ['Hash'],
     isa     => 'HashRef[App::SimplenoteSync::Note]',
     default => sub { {} },
+    handles   => {
+        set_note     => 'set',
+        has_note     => 'exists',
+        num_notes    => 'count',
+        remove_note  => 'delete',
+        note_kvs     => 'kv',
+    },
 );
 
 has stats => (
@@ -259,13 +267,14 @@ method merge_conflicts {
 method _merge_local_and_remote_lists(HashRef $remote_notes) {
     $self->logger->debug("Comparing local and remote lists");
 
-    # XXX what about notes which were deleted on the server, and are to be restored
-    # from local files? i.e key set locally, not existent remotely? How to tell
-    # if the file SHOULD be trashed? User option, perhaps --restore
-
     while (my ($key, $remote_note) = each %$remote_notes) {
-        if (exists $self->notes->{$key}) {
+        if ($self->has_note($key)) {
             my $local_note = $self->notes->{$key};
+
+            if ($local_note->ignored) {
+                $self->logger->debug("[$key] is being ignored");
+                next;
+            }
 
             $self->logger->debug("[$key] exists locally and remotely");
 
@@ -275,13 +284,14 @@ method _merge_local_and_remote_lists(HashRef $remote_notes) {
                     $local_note->file->stringify
                 );
                 $self->_delete_note($local_note);
+                next;
             }
 
             # TODO changed tags don't change modifydate
             # TODO versions and merging
             # which is newer?
-            $remote_note->modifydate->set_nanosecond(0)
-              ;    # utime doesn't use nanoseconds
+            # utime doesn't use nanoseconds
+            $remote_note->modifydate->set_nanosecond(0);
             $self->logger->debugf(
                 'Comparing dates: remote [%s] // local [%s]',
                 $remote_note->modifydate->iso8601,
@@ -376,7 +386,6 @@ method _process_local_notes {
             createdate => $f->stat->ctime,
             modifydate => $f->stat->mtime,
             file       => $f,
-            notes_dir  => $self->notes_dir,
         );
 
         if (!$self->_read_note_metadata($note)) {
@@ -388,13 +397,27 @@ method _process_local_notes {
             $self->stats->{new_local}++;
         }
 
-        if (defined $note->key) {
+        if (!defined $note->key) {
+            $self->logger->error("Skipping [%s]: failed to find a key");
+            next;
+        }
+        
+        my $key = $note->key;
+            
+        if ($self->has_note($key)) {
 
+            $self->logger->error("[$key] Already have this key: title/filename clash??");
+            $self->logger->errorf('[%s] vs [%s]',
+                $note->file->basename, $self->notes->{$key}->file->basename
+            );
+            $self->logger->error('Ignoring this key for this run');
+            $self->notes->{$key}->ignored(1);
+
+        } else {
             # add note to list
             $self->notes->{$note->key} = $note;
-        } else {
-            $self->logger->error("Skipping [%s]: failed to find a key");
         }
+
     }
 
     return 1;

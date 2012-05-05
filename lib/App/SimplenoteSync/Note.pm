@@ -23,12 +23,11 @@ has file_extension => (
     is      => 'ro',
     isa     => 'HashRef',
     traits  => ['DoNotSerialize'],
-    default => sub {
-        {
+    default => sub {{
             default  => 'txt',
             markdown => 'mkdn',
-        };
-    });
+    }},
+);
 
 # XXX should we serialise this?
 has notes_dir => (
@@ -37,6 +36,13 @@ has notes_dir => (
     traits   => ['DoNotSerialize'],
     required => 1,
     default  => sub { return $_[0]->file->dir },
+);
+
+has ignored => (
+    is      => 'rw',
+    isa     => 'Bool',
+    traits  => ['DoNotSerialize'],
+    default => 0,
 );
 
 MooseX::Storage::Engine->add_custom_type_handler(
