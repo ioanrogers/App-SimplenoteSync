@@ -96,7 +96,7 @@ method _build_notes_dir {
     return $notes_dir;
 }
 
-method _check_notes_dir {
+method _check_notes_dir ($path) {
     if ( -d $self->notes_dir ) {
         return;
     }
