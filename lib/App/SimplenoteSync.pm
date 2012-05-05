@@ -101,7 +101,7 @@ method _check_notes_dir ($path) {
         return;
     }
     $self->notes_dir->mkpath
-      or die "Sync directory [" . $self->notes_dir . "] does not exist\n";
+      or die "Sync directory [" . $self->notes_dir . "] does not exist and could not be created: $!\n";
 }
 
 method _read_note_metadata ( App::SimplenoteSync::Note $note ) {
@@ -115,20 +115,33 @@ method _read_note_metadata ( App::SimplenoteSync::Note $note ) {
         return;
     }
 
+    my $has_simplenote_key = 0;
     foreach my $attr ( @attrs ) {
-        $self->logger->debugf( "attr: $attr" );
+        $self->logger->debugf( "Examining attr: $attr" );
         next if $attr !~ /^simplenote\.(\w+)$/;
         my $key = $1;
         my $value = getfattr( $note->file, $attr );
 
-        if ( $key eq 'systemtags' || $key eq 'tags' ) {
-            my @tags = split ',', $value;
-            $note->$key( \@tags );
-        } else {
-            $note->$key( $value );
+        given ($key) {
+            when ('key') {
+                $note->key( $value );
+                $has_simplenote_key = 1;
+            }
+            when  ([qw/systemtags tags/]) {
+                my @tags = split ',', $value;
+                $note->$key( \@tags );
+            }
+            default {
+                $self->logger->debug('Mystery simplenote tag found: ' . $key);
+            }
         }
     }
 
+    if (!$has_simplenote_key) {
+        $self->logger->debug('No simplenote.key tag found in ' . $note->file->stringify);
+        return;
+    }
+    
     return 1;
 }
 
