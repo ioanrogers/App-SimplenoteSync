@@ -4,6 +4,7 @@ package App::SimplenoteSync::Note;
 
 use v5.10;
 use Moose;
+use Method::Signatures;
 use MooseX::Types::Path::Class;
 use Try::Tiny;
 use namespace::autoclean;
@@ -29,7 +30,6 @@ has file_extension => (
     }},
 );
 
-# XXX should we serialise this?
 has notes_dir => (
     is       => 'ro',
     isa      => 'Path::Class::Dir',
@@ -51,11 +51,7 @@ MooseX::Storage::Engine->add_custom_type_handler(
         collapse => sub { $_[0]->stringify }));
 
 # set the markdown systemtag if the file has a markdown extension
-sub _has_markdown_ext {
-    my $self = shift;
-
-    # TODO an array of possibilities? e.g. mkdn, markdown, md
-    # maybe from system mime info?
+method _has_markdown_ext(@_) {
     my $ext = $self->file_extension->{markdown};
 
     if ($self->file =~ m/\.$ext$/ && !$self->is_markdown) {
@@ -66,8 +62,7 @@ sub _has_markdown_ext {
 }
 
 # Convert note's title into file
-sub _title_to_filename {
-    my ($self, $title, $old_title) = @_;
+method _title_to_filename(Str $title, Str $old_title?) {
 
     # don't change if already set
     if (defined $self->file) {
@@ -94,9 +89,7 @@ sub _title_to_filename {
     return 1;
 }
 
-sub load_content {
-    my $self = shift;
-
+method load_content {
     my $content;
 
     try {
