@@ -2,9 +2,6 @@ package App::SimplenoteSync;
 
 # ABSTRACT: Synchronise text notes with simplenoteapp.com
 
-# TODO: Windows compatibility? This has not been tested AT ALL yet
-# TODO: maybe hash file content to better determine if something has changed?
-
 use v5.10;
 use open qw(:std :utf8);
 use Moose;
@@ -260,7 +257,6 @@ method merge_conflicts {
 
     # Both the local copy and server copy were changed since last sync
     # We'll merge the changes into a new master file, and flag any conflicts
-    # TODO spawn some diff tool?
 
 }
 
@@ -287,8 +283,6 @@ method _merge_local_and_remote_lists(HashRef $remote_notes) {
                 next;
             }
 
-            # TODO changed tags don't change modifydate
-            # TODO versions and merging
             # which is newer?
             # utime doesn't use nanoseconds
             $remote_note->modifydate->set_nanosecond(0);
@@ -344,6 +338,7 @@ method _merge_local_and_remote_lists(HashRef $remote_notes) {
 }
 
 # TODO: check ctime
+# XXX: this isn't called anywhere?!?
 method _update_dates(App::SimplenoteSync::Note $note, Path::Class::File $file)
 {
     my $mod_time = DateTime->from_epoch(epoch => $file->stat->mtime);
@@ -379,7 +374,6 @@ method _process_local_notes {
         $self->logger->debug("Checking local file [$f]");
         $self->stats->{local_files}++;
         
-        # TODO: configure file extensions, or use mime types?
         next if $f !~ /\.(txt|mkdn)$/;
 
         my $note = App::SimplenoteSync::Note->new(
