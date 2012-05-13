@@ -12,7 +12,6 @@ use Pod::Usage;
 use Config::INI::Reader;
 use Log::Dispatch;
 use Log::Any::Adapter;
-use YAML::Any;
 
 my $logger;
 

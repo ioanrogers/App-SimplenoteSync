@@ -7,7 +7,6 @@ use open qw(:std :utf8);
 use Moose;
 use MooseX::Types::Path::Class;
 use Method::Signatures;
-use YAML::Any;
 use Log::Any qw//;
 use DateTime;
 use Try::Tiny;
