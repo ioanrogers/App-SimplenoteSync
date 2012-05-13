@@ -6,13 +6,13 @@ use v5.10;
 use open qw(:std :utf8);
 use Moose;
 use MooseX::Types::Path::Class;
-use Method::Signatures;
 use Log::Any qw//;
 use DateTime;
 use Try::Tiny;
 use File::ExtAttr ':all';
 use App::SimplenoteSync::Note;
 use WebService::Simplenote;
+use Method::Signatures;
 use namespace::autoclean;
 
 has ['email', 'password'] => (

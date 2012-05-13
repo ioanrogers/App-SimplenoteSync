@@ -27,7 +27,7 @@ ok($note->isa('App::SimplenoteSync::Note'), '... the correct class');
 
 cmp_ok($note->title, 'eq', 'Some Content', 'Title is correct');
 
-ok(my $json_str       = $note->freeze,         'Serialise note to JSON');
+ok(my $json_str       = $note->serialise,      'Serialise note to JSON');
 ok(my $note_from_json = decode_json $json_str, '...JSON is valid');
-ok(my $note_thawed = App::SimplenoteSync::Note->thaw($json_str),
+ok(my $note_thawed = App::SimplenoteSync::Note->new($json_str),
     '...can deserialise');

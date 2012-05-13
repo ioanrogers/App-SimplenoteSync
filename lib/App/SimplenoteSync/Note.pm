@@ -4,26 +4,29 @@ package App::SimplenoteSync::Note;
 
 use v5.10;
 use Moose;
-use Method::Signatures;
 use MooseX::Types::Path::Class;
 use Try::Tiny;
 use namespace::autoclean;
 
 extends 'WebService::Simplenote::Note';
 
+use Method::Signatures;
+
 has '+title' => (trigger => \&_title_to_filename,);
 
 has file => (
-    is      => 'rw',
-    isa     => 'Path::Class::File',
-    coerce  => 1,
-    trigger => \&_has_markdown_ext,
+    is        => 'rw',
+    isa       => 'Path::Class::File',
+    coerce    => 1,
+    traits    => ['NotSerialised'],
+    trigger   => \&_has_markdown_ext,
+    predicate => 'has_file',
 );
 
 has file_extension => (
     is      => 'ro',
     isa     => 'HashRef',
-    traits  => ['DoNotSerialize'],
+    traits  => ['NotSerialised'],
     default => sub {{
             default  => 'txt',
             markdown => 'mkdn',
@@ -33,22 +36,24 @@ has file_extension => (
 has notes_dir => (
     is       => 'ro',
     isa      => 'Path::Class::Dir',
-    traits   => ['DoNotSerialize'],
+    traits   => ['NotSerialised'],
     required => 1,
-    default  => sub { return $_[0]->file->dir },
+    default  => sub {
+        my $self = shift;
+        if ($self->has_file) {
+            return $self->file->dir;
+        } else {
+            return Path::Class::Dir->new($ENV{HOME}, 'Notes');
+        }
+    },
 );
 
 has ignored => (
     is      => 'rw',
     isa     => 'Bool',
-    traits  => ['DoNotSerialize'],
+    traits  => ['NotSerialised'],
     default => 0,
 );
-
-MooseX::Storage::Engine->add_custom_type_handler(
-    'Path::Class::File' => (
-        expand   => sub { Path::Class::File->new($_[0]) },
-        collapse => sub { $_[0]->stringify }));
 
 # set the markdown systemtag if the file has a markdown extension
 method _has_markdown_ext(@_) {
