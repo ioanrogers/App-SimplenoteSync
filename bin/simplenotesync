@@ -12,6 +12,7 @@ use Pod::Usage;
 use Config::INI::Reader;
 use Log::Dispatch;
 use Log::Any::Adapter;
+use Try::Tiny;
 
 my $logger;
 
@@ -102,8 +103,18 @@ sub get_logger {
 sub get_config {
     my $conf_dir  = Path::Class::Dir->new(File::BaseDir->config_home);
     my $conf_file = $conf_dir->file("$PROGNAME.ini");
-    $logger->debug("Reading config from $conf_file");
-    my $config = Config::INI::Reader->read_file($conf_file);
+    $logger->debug("Trying to read config from $conf_file");
+
+    my $config;
+    try {
+        $config = Config::INI::Reader->read_file($conf_file);
+    }
+    catch {
+        if (!exists $opt->{email} || !exists $opt->{password}) {
+            die
+              "--email and/or --password missing from command line, and failed to read config file: $_";
+        }
+    };
 
     # merge config opts - cli opts take precedence
     foreach my $key (keys %{$config->{_}}) {
