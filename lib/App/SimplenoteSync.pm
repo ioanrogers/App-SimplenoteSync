@@ -10,6 +10,7 @@ use Log::Any qw//;
 use DateTime;
 use Try::Tiny;
 use File::ExtAttr ':all';
+use Proc::InvokeEditor;
 use App::SimplenoteSync::Note;
 use WebService::Simplenote;
 use Method::Signatures;
@@ -26,12 +27,12 @@ has notes => (
     traits  => ['Hash'],
     isa     => 'HashRef[App::SimplenoteSync::Note]',
     default => sub { {} },
-    handles   => {
-        set_note     => 'set',
-        has_note     => 'exists',
-        num_notes    => 'count',
-        remove_note  => 'delete',
-        note_kvs     => 'kv',
+    handles => {
+        set_note    => 'set',
+        has_note    => 'exists',
+        num_notes   => 'count',
+        remove_note => 'delete',
+        note_kvs    => 'kv',
     },
 );
 
@@ -66,18 +67,24 @@ has simplenote => (
 );
 
 has ['no_server_updates', 'no_local_updates'] => (
-    is       => 'ro',
-    isa      => 'Bool',
-    required => 1,
-    default  => 0,
+    is      => 'ro',
+    isa     => 'Bool',
+    lazy    => 1,
+    default => 0,
+);
+
+has editor => (
+    is      => 'ro',
+    isa     => 'Undef|Str',
+    lazy    => 1,
+    default => undef,
 );
 
 has logger => (
-    is       => 'ro',
-    isa      => 'Object',
-    lazy     => 1,
-    required => 1,
-    default  => sub { return Log::Any->get_logger },
+    is      => 'ro',
+    isa     => 'Object',
+    lazy    => 1,
+    default => sub { return Log::Any->get_logger },
 );
 
 has notes_dir => (
@@ -193,12 +200,8 @@ method _get_note(Str $key) {
     if ($self->no_local_updates) {
         return;
     }
-    my $fh = $note->file->open('w');
 
-    # data from simplenote should always be utf8
-    $fh->binmode(':utf8');
-    $fh->print($note->content);
-    $fh->close;
+    $note->save_content or return;
 
     # Set created and modified time
     # XXX: Not sure why this has to be done twice, but it seems to on Mac OS X
@@ -372,7 +375,7 @@ method _process_local_notes {
 
         $self->logger->debug("Checking local file [$f]");
         $self->stats->{local_files}++;
-        
+
         next if $f !~ /\.(txt|mkdn)$/;
 
         my $note = App::SimplenoteSync::Note->new(
@@ -394,19 +397,20 @@ method _process_local_notes {
             $self->logger->error("Skipping [%s]: failed to find a key");
             next;
         }
-        
+
         my $key = $note->key;
-            
+
         if ($self->has_note($key)) {
 
-            $self->logger->error("[$key] Already have this key: title/filename clash??");
-            $self->logger->errorf('[%s] vs [%s]',
-                $note->file->basename, $self->notes->{$key}->file->basename
-            );
+            $self->logger->error(
+                "[$key] Already have this key: title/filename clash??");
+            $self->logger->errorf('[%s] vs [%s]', $note->file->basename,
+                $self->notes->{$key}->file->basename);
             $self->logger->error('Ignoring this key for this run');
             $self->notes->{$key}->ignored(1);
 
         } else {
+
             # add note to list
             $self->notes->{$note->key} = $note;
         }
@@ -432,8 +436,9 @@ method sync_notes {
 }
 
 method sync_report {
-    $self->logger->infof('Examined local files: ' . $self->stats->{local_files});
-    
+    $self->logger->infof(
+        'Examined local files: ' . $self->stats->{local_files});
+
     $self->logger->infof('New local files: ' . $self->stats->{new_local});
     $self->logger->infof(
         'Updated local files: ' . $self->stats->{update_local});
@@ -446,6 +451,60 @@ method sync_report {
         'Deleted local files: ' . $self->stats->{deleted_local});
     $self->logger->infof('Ignored remote trash: ' . $self->stats->{trash});
 
+}
+
+method edit($file) {
+    my $ext = '.txt';
+    my $note = App::SimplenoteSync::Note->new(file => $file);
+    $self->logger->infof('Editing file: [%s]', $note->file->stringify);
+
+    if (!-e $note->file) {
+        require File::Basename;
+        my ($title) = File::Basename::fileparse($file, qr/\.[^.]*/);
+        $self->logger->info('Creating new file');
+
+        if ($note->is_markdown) {
+            $title = "# $title";
+        }
+        $note->content("$title\n\n");
+    } else {
+        $self->_read_note_metadata($note);
+        $note->load_content;
+    }
+
+    # make sure we get correct highlighting
+    if ($note->is_markdown) {
+        $ext = '.markdown';
+    }
+
+    my $editor = Proc::InvokeEditor->new;
+
+    if (defined $self->editor) {
+        $self->logger->debugf('Overriding editor to [%s]', $self->editor);
+        $editor->editors([$self->editor]);
+    }
+
+    my $new_content = $editor->edit($note->content, $ext);
+
+    if ($new_content eq $note->content) {
+        $self->logger->info('No changes made');
+        return 1;
+    }
+
+    $note->content($new_content);
+    $note->save_content
+      or return;
+
+    $self->logger->infof('Saved new content to [%s]', $note->file->basename);
+
+    # set times
+    $note->createdate($note->file->stat->ctime);
+    $note->modifydate($note->file->stat->mtime);
+
+    $self->_put_note($note);
+    $self->_write_note_metadata($note);
+
+    return 1;
 }
 
 __PACKAGE__->meta->make_immutable;

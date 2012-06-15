@@ -27,10 +27,12 @@ has file_extension => (
     is      => 'ro',
     isa     => 'HashRef',
     traits  => ['NotSerialised'],
-    default => sub {{
+    default => sub {
+        {
             default  => 'txt',
             markdown => 'mkdn',
-    }},
+        };
+    },
 );
 
 has notes_dir => (
@@ -107,7 +109,22 @@ method load_content {
 
     $self->content($content);
     return 1;
+}
 
+method save_content {
+    try {
+        my $fh = $self->file->open('w');
+
+        # data from simplenote should always be utf8
+        $fh->binmode(':utf8');
+        $fh->print($self->content);
+    }
+    catch {
+        $self->logger->error("Failed to write content to file: $_");
+        return;
+    };
+
+    return 1;
 }
 
 __PACKAGE__->meta->make_immutable;

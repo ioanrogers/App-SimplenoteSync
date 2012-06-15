@@ -18,13 +18,17 @@ my $logger;
 
 our $PROGNAME = 'simplenotesync';
 
-my $opt = {};
+my $opt = {action => 'sync'};
 
 sub get_opts {
-    my $getopt =
-      GetOptions($opt, 'help|h', 'man', 'debug|d!', 'version|v',
-        'no_server_updates!', 'no_local_updates!', 'email=s', 'password=s',
-        'quiet|q!');
+    my $getopt = GetOptions(
+        $opt,                'help|h',
+        'man',               'debug|d!',
+        'version|v',         'no_server_updates!',
+        'no_local_updates!', 'email=s',
+        'password=s',        'quiet|q!',
+        'edit|e=s',          'editor=s'
+    );
 
     if ($getopt == 0 or defined $opt->{help}) {
         pod2usage;
@@ -38,6 +42,10 @@ sub get_opts {
 
     if (defined $opt->{man}) {
         pod2usage(-verbose => 2);
+    }
+
+    if (defined $opt->{edit}) {
+        $opt->{action} = 'edit';
     }
 
     # is there a path on the command line?
@@ -145,11 +153,15 @@ get_config;
 
 my $app = App::SimplenoteSync->new($opt);
 
-my $notes = $app->sync_notes;
-
-$app->sync_report;
-
-__END__
+given ($opt->{action}) {
+    when ('edit') {
+        $app->edit($opt->{edit});
+    }
+    default {
+        my $notes = $app->sync_notes;
+        $app->sync_report;
+    }
+}
 
 =head1 SYNOPSIS
  
@@ -165,6 +177,8 @@ simplenotesync [options] [pathname]
    --password              password used for simplenote account
    --no_server_updates     don't modify notes on server
    --no_local_updates      don't modify notes locally
+   --edit                  edit a note, preserving xattrs
+   --editor                override $ENV{EDITOR}
 
   [pathname] is the local notes folder to syncronise with. Defaults to $HOME/Notes.
   
@@ -191,7 +205,7 @@ F<simplenotesync.ini> in your config dir, usually ~/.config.
 
 It is an ini file, supporting the following keys:
   
-  email, password, notes_dir, no_server_updates, no_local_updates
+  email, password, notes_dir, no_server_updates, no_local_updates, editor
 
 =head1 KNOWN ISSUES
 
