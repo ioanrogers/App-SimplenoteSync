@@ -394,7 +394,7 @@ method _process_local_notes {
         }
 
         if (!defined $note->key) {
-            $self->logger->error("Skipping [%s]: failed to find a key");
+            $self->logger->errorf("Skipping [%s]: failed to find a key", $note->file->basename);
             next;
         }
 
