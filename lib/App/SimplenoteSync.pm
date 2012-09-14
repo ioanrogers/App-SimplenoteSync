@@ -2,10 +2,11 @@ package App::SimplenoteSync;
 
 # ABSTRACT: Synchronise text notes with simplenoteapp.com
 
-use v5.10;
+use v5.10.1;
 use open qw(:std :utf8);
-use Moose;
-use MooseX::Types::Path::Class;
+use Moo;
+use MooX::Types::MooseLike::Base qw/:all/;
+use Path::Class;
 use Log::Any qw//;
 use DateTime;
 use Try::Tiny;
@@ -14,31 +15,28 @@ use Proc::InvokeEditor;
 use App::SimplenoteSync::Note;
 use WebService::Simplenote;
 use Method::Signatures;
-use namespace::autoclean;
 
-has ['email', 'password'] => (
-    is       => 'ro',
-    isa      => 'Str',
-    required => 1,
-);
+with qw/WebService::Simplenote::Role::Logger/;
+
+has email    => ( is => 'ro', isa => Str, required => 1,);
+has password => ( is => 'ro', isa => Str, required => 1,);
 
 has notes => (
     is      => 'rw',
-    traits  => ['Hash'],
-    isa     => 'HashRef[App::SimplenoteSync::Note]',
+    isa     => HashRef[Object],
     default => sub { {} },
-    handles => {
-        set_note    => 'set',
-        has_note    => 'exists',
-        num_notes   => 'count',
-        remove_note => 'delete',
-        note_kvs    => 'kv',
-    },
+    # handles => {
+        # set_note    => 'set',
+        # has_note    => 'exists',
+        # num_notes   => 'count',
+        # remove_note => 'delete',
+        # note_kvs    => 'kv',
+    # },
 );
 
 has stats => (
     is      => 'rw',
-    isa     => 'HashRef',
+    isa     => HashRef,
     default => sub {
         {
             new_local     => 0,
@@ -54,8 +52,7 @@ has stats => (
 
 has simplenote => (
     is      => 'rw',
-    isa     => 'WebService::Simplenote',
-    lazy    => 1,
+    isa     => InstanceOf['WebService::Simplenote'],
     default => sub {
         my $self = shift;
         return WebService::Simplenote->new(
@@ -66,34 +63,24 @@ has simplenote => (
     },
 );
 
-has ['no_server_updates', 'no_local_updates'] => (
-    is      => 'ro',
-    isa     => 'Bool',
-    lazy    => 1,
-    default => 0,
-);
+has no_server_updates => ( is => 'ro', isa => Bool, lazy => 1, default => sub { 0 },);
+has no_local_updates  => ( is => 'ro', isa => Bool, lazy => 1, default => sub { 0 },);
 
-has editor => (
-    is      => 'ro',
-    isa     => 'Undef|Str',
-    lazy    => 1,
-    default => undef,
-);
-
-has logger => (
-    is      => 'ro',
-    isa     => 'Object',
-    lazy    => 1,
-    default => sub { return Log::Any->get_logger },
-);
+has editor => ( is => 'ro', isa => Maybe[Str],lazy => 1,);
 
 has notes_dir => (
     is       => 'ro',
-    isa      => 'Path::Class::Dir',
+    isa      => InstanceOf['Path::Class::Dir'],
     required => 1,
-    coerce   => 1,
-    builder  => '_build_notes_dir',
-    trigger  => \&_check_notes_dir,
+    builder  => 1,
+    trigger  => 1,
+    coerce   => sub {
+        if (ref $_[0] eq 'Path::Class::Dir') {
+            #warn ref $_[0];
+            return $_[0];
+        }
+        return Path::Class::Dir->new(@_);
+    }
 );
 
 method _build_notes_dir {
@@ -108,7 +95,7 @@ method _build_notes_dir {
     return $notes_dir;
 }
 
-method _check_notes_dir($path) {
+method _trigger_notes_dir($path) {
     if (-d $self->notes_dir) {
         return;
     }
@@ -171,14 +158,16 @@ method _write_note_metadata(App::SimplenoteSync::Note $note) {
 
     # XXX only write if changed? Add a dirty attr?
     # should always be a key
-    my $metadata = {'simplenote.key' => $note->key,};
+    my $metadata = {
+        'simplenote.key'        => $note->key,
+    };
 
-    if ($note->has_systags) {
-        $metadata->{'simplenote.systemtags'} = $note->join_systags(',');
+    if ($note->has_systemtags) {
+        $metadata->{'simplenote.systemtags'} = $note->systemtags->to_string;
     }
-
+    
     if ($note->has_tags) {
-        $metadata->{'simplenote.tags'} = $note->join_tags(',');
+        $metadata->{'simplenote.tags'} = $note->tags->to_string;
     }
 
     foreach my $key (keys %$metadata) {
@@ -266,7 +255,7 @@ method _merge_local_and_remote_lists(HashRef $remote_notes) {
     $self->logger->debug("Comparing local and remote lists");
 
     while (my ($key, $remote_note) = each %$remote_notes) {
-        if ($self->has_note($key)) {
+        if (exists $self->notes->{$key}) {
             my $local_note = $self->notes->{$key};
 
             if ($local_note->ignored) {
@@ -401,7 +390,7 @@ method _process_local_notes {
 
         my $key = $note->key;
 
-        if ($self->has_note($key)) {
+        if (exists $self->notes->{$key}) {
 
             $self->logger->error(
                 "[$key] Already have this key: title/filename clash??");
@@ -507,7 +496,5 @@ method edit($file) {
 
     return 1;
 }
-
-__PACKAGE__->meta->make_immutable;
 
 1;

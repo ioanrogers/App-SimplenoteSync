@@ -4,7 +4,6 @@ use Test::More tests => 6;
 
 use App::SimplenoteSync::Note;
 use DateTime;
-use Path::Class;
 use JSON;
 
 my $date = DateTime->new(
@@ -18,7 +17,6 @@ my $notes_dir = Path::Class::Dir->new('.');
 my $note = App::SimplenoteSync::Note->new(
     createdate => $date->epoch,
     modifydate => $date->epoch,
-    notes_dir  => $notes_dir,
     content    => "# Some Content #\n This is a test",
 );
 
@@ -31,3 +29,8 @@ ok(my $json_str       = $note->serialise,      'Serialise note to JSON');
 ok(my $note_from_json = decode_json $json_str, '...JSON is valid');
 ok(my $note_thawed = App::SimplenoteSync::Note->new($json_str),
     '...can deserialise');
+
+# XXX logger is lazy, how do I ignore it?
+#is_deeply($note_thawed, $note, 'Unserialised note is the same as original');
+
+

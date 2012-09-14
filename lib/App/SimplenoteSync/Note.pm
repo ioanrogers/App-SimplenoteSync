@@ -2,31 +2,32 @@ package App::SimplenoteSync::Note;
 
 # ABSTRACT: stores notes in plain files,
 
-use v5.10;
-use Moose;
-use MooseX::Types::Path::Class;
+use v5.10.1;
+use Moo;
+use MooX::Types::MooseLike::Base qw/:all/;
+use Path::Class;
 use Try::Tiny;
-use namespace::autoclean;
-
+use Method::Signatures;
+use Data::Printer;
 extends 'WebService::Simplenote::Note';
 
-use Method::Signatures;
+# XXX Converting too Moo creates trigger issues! The title trigger is being fired
+# before systemtags are set
+#has '+title' => (trigger => \&_title_to_filename,);
 
-has '+title' => (trigger => \&_title_to_filename,);
-
+# XXX trigger is always fired before file_extension is set
 has file => (
     is        => 'rw',
-    isa       => 'Path::Class::File',
-    coerce    => 1,
-    traits    => ['NotSerialised'],
-    trigger   => \&_has_markdown_ext,
+    isa      => InstanceOf['Path::Class::File'],
+    #trigger   => \&_has_markdown_ext,
     predicate => 'has_file',
+    lazy      => 1,
 );
 
 has file_extension => (
     is      => 'ro',
-    isa     => 'HashRef',
-    traits  => ['NotSerialised'],
+    lazy    => 1,
+    isa     => HashRef,
     default => sub {
         {
             default  => 'txt',
@@ -37,12 +38,13 @@ has file_extension => (
 
 has notes_dir => (
     is       => 'ro',
-    isa      => 'Path::Class::Dir',
-    traits   => ['NotSerialised'],
-    required => 1,
+    lazy     => 1,
+    isa      => InstanceOf['Path::Class::Dir'],
     default  => sub {
         my $self = shift;
+        say "NOTES DIR?";
         if ($self->has_file) {
+            say "FROM FILE: " . $self->file;
             return $self->file->dir;
         } else {
             return Path::Class::Dir->new($ENV{HOME}, 'Notes');
@@ -52,13 +54,13 @@ has notes_dir => (
 
 has ignored => (
     is      => 'rw',
-    isa     => 'Bool',
-    traits  => ['NotSerialised'],
-    default => 0,
+    isa     => Bool,
+    default => sub { 0 },
 );
 
 # set the markdown systemtag if the file has a markdown extension
 method _has_markdown_ext(@_) {
+    p $self;
     my $ext = $self->file_extension->{markdown};
 
     if ($self->file =~ m/\.$ext$/ && !$self->is_markdown) {
@@ -69,28 +71,28 @@ method _has_markdown_ext(@_) {
 }
 
 # Convert note's title into file
-method _title_to_filename(Str $title, Str $old_title?) {
-
+method _title_to_filename(@_) {
+    say "TITLE TO FILENAME";
+    p @_;
     # don't change if already set
-    if (defined $self->file) {
-        return;
-    }
+    #if (defined $self->file) {
+        #return;
+    #}
 
     # TODO trim
-    my $file = $title;
+    my $file = $self->title;
 
     # non-word to underscore
     $file =~ s/\W/_/g;
     $file .= '.';
 
-    if (grep '/markdown/', @{$self->systemtags}) {
+    if ($self->is_markdown) {
         $file .= $self->file_extension->{markdown};
         $self->logger->debug('Note is markdown');
     } else {
         $file .= $self->file_extension->{default};
         $self->logger->debug('Note is plain text');
     }
-
     $self->file($self->notes_dir->file($file));
 
     return 1;
@@ -99,6 +101,10 @@ method _title_to_filename(Str $title, Str $old_title?) {
 method load_content {
     my $content;
 
+    if (!$self->file) {
+        $self->_title_to_filename;
+    }
+    
     try {
         $content = $self->file->slurp(iomode => '<:utf8');
     }
@@ -112,6 +118,9 @@ method load_content {
 }
 
 method save_content {
+    if (!$self->file) {
+        $self->_title_to_filename;
+    }
     try {
         my $fh = $self->file->open('w');
 
@@ -127,6 +136,18 @@ method save_content {
     return 1;
 }
 
-__PACKAGE__->meta->make_immutable;
+around 'TO_JSON' => sub {
+    my ($orig, $self) = @_;
+    
+    my $hash = $orig->($self);
+
+    delete $hash->{notes_dir};
+    delete $hash->{file};
+    delete $hash->{file_extension};
+    delete $hash->{ignored};
+
+    return $hash;
+};
+
 
 1;
