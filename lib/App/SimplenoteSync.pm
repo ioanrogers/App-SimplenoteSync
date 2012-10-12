@@ -23,14 +23,15 @@ has password => ( is => 'ro', isa => Str, required => 1,);
 
 has notes => (
     is      => 'rw',
-    isa     => HashRef[Object],
+    isa     => HashRef [Object],
     default => sub { {} },
+
     # handles => {
-        # set_note    => 'set',
-        # has_note    => 'exists',
-        # num_notes   => 'count',
-        # remove_note => 'delete',
-        # note_kvs    => 'kv',
+    # set_note    => 'set',
+    # has_note    => 'exists',
+    # num_notes   => 'count',
+    # remove_note => 'delete',
+    # note_kvs    => 'kv',
     # },
 );
 
@@ -52,7 +53,7 @@ has stats => (
 
 has simplenote => (
     is      => 'rw',
-    isa     => InstanceOf['WebService::Simplenote'],
+    isa     => InstanceOf ['WebService::Simplenote'],
     default => sub {
         my $self = shift;
         return WebService::Simplenote->new(
@@ -70,20 +71,20 @@ has editor => ( is => 'ro', isa => Maybe[Str],lazy => 1,);
 
 has notes_dir => (
     is       => 'ro',
-    isa      => InstanceOf['Path::Class::Dir'],
+    isa      => InstanceOf ['Path::Class::Dir'],
     required => 1,
     builder  => 1,
     trigger  => 1,
     coerce   => sub {
         if (ref $_[0] eq 'Path::Class::Dir') {
+
             #warn ref $_[0];
             return $_[0];
         }
         return Path::Class::Dir->new(@_);
-    }
-);
+    });
 
-method _build_notes_dir {
+method _build_notes_dir () {
 
     my $notes_dir = Path::Class::Dir->new($ENV{HOME}, 'Notes');
 
@@ -95,7 +96,7 @@ method _build_notes_dir {
     return $notes_dir;
 }
 
-method _trigger_notes_dir($path) {
+method _trigger_notes_dir ($path) {
     if (-d $self->notes_dir) {
         return;
     }
@@ -105,7 +106,7 @@ method _trigger_notes_dir($path) {
       . "] does not exist and could not be created: $!\n";
 }
 
-method _read_note_metadata(App::SimplenoteSync::Note $note) {
+method _read_note_metadata (App::SimplenoteSync::Note $note) {
     $self->logger->debugf('Looking for metadata for [%s]',
         $note->file->basename);
 
@@ -148,7 +149,7 @@ method _read_note_metadata(App::SimplenoteSync::Note $note) {
     return 1;
 }
 
-method _write_note_metadata(App::SimplenoteSync::Note $note) {
+method _write_note_metadata (App::SimplenoteSync::Note $note) {
     if ($self->no_local_updates) {
         return;
     }
@@ -158,14 +159,12 @@ method _write_note_metadata(App::SimplenoteSync::Note $note) {
 
     # XXX only write if changed? Add a dirty attr?
     # should always be a key
-    my $metadata = {
-        'simplenote.key'        => $note->key,
-    };
+    my $metadata = {'simplenote.key' => $note->key,};
 
     if ($note->has_systemtags) {
         $metadata->{'simplenote.systemtags'} = $note->systemtags->to_string;
     }
-    
+
     if ($note->has_tags) {
         $metadata->{'simplenote.tags'} = $note->tags->to_string;
     }
@@ -179,7 +178,7 @@ method _write_note_metadata(App::SimplenoteSync::Note $note) {
     return 1;
 }
 
-method _get_note(Str $key) {
+method _get_note (Str $key) {
     my $original_note = $self->simplenote->get_note($key);
 
     # 'cast' to our note type
@@ -206,7 +205,7 @@ method _get_note(Str $key) {
     return 1;
 }
 
-method _delete_note(App::SimplenoteSync::Note $note) {
+method _delete_note (App::SimplenoteSync::Note $note) {
     if ($self->no_local_updates) {
         $self->logger->warn('no_local_updates is set, not deleting note');
         return;
@@ -226,7 +225,7 @@ method _delete_note(App::SimplenoteSync::Note $note) {
     return 1;
 }
 
-method _put_note(App::SimplenoteSync::Note $note) {
+method _put_note (App::SimplenoteSync::Note $note) {
 
     if (!defined $note->content) {
         $note->load_content || return;
@@ -244,14 +243,14 @@ method _put_note(App::SimplenoteSync::Note $note) {
     return 1;
 }
 
-method merge_conflicts {
+method merge_conflicts () {
 
     # Both the local copy and server copy were changed since last sync
     # We'll merge the changes into a new master file, and flag any conflicts
 
 }
 
-method _merge_local_and_remote_lists(HashRef $remote_notes) {
+method _merge_local_and_remote_lists (HashRef $remote_notes) {
     $self->logger->debug("Comparing local and remote lists");
 
     while (my ($key, $remote_note) = each %$remote_notes) {
@@ -330,8 +329,7 @@ method _merge_local_and_remote_lists(HashRef $remote_notes) {
 
 # TODO: check ctime
 # XXX: this isn't called anywhere?!?
-method _update_dates(App::SimplenoteSync::Note $note, Path::Class::File $file)
-{
+method _update_dates (App::SimplenoteSync::Note $note, Path::Class::File $file) {
     my $mod_time = DateTime->from_epoch(epoch => $file->stat->mtime);
 
     given (DateTime->compare($mod_time, $note->modifydate)) {
@@ -353,7 +351,7 @@ method _update_dates(App::SimplenoteSync::Note $note, Path::Class::File $file)
     return 1;
 }
 
-method _process_local_notes {
+method _process_local_notes () {
     my $num_files = scalar $self->notes_dir->children(no_hidden => 1);
 
     $self->logger->infof('Scanning [%d] items in [%s]',
@@ -410,8 +408,9 @@ method _process_local_notes {
     return 1;
 }
 
-method sync_notes {
-                    #  look for status of local notes
+method sync_notes () {
+
+    #  look for status of local notes
     $self->_process_local_notes;
 
     # get list of remote notes
@@ -425,7 +424,7 @@ method sync_notes {
 
 }
 
-method sync_report {
+method sync_report () {
     $self->logger->infof(
         'Examined local files: ' . $self->stats->{local_files});
 
@@ -443,7 +442,7 @@ method sync_report {
 
 }
 
-method edit($file) {
+method edit ($file) {
     my $ext = '.txt';
     my $note = App::SimplenoteSync::Note->new(file => $file);
     $self->logger->infof('Editing file: [%s]', $note->file->stringify);

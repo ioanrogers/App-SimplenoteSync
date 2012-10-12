@@ -2,4 +2,4 @@
 App-*
 *~
 *.log
-
+.tidyall.d

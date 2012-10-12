@@ -33,4 +33,3 @@ ok(my $note_thawed = App::SimplenoteSync::Note->new($json_str),
 # XXX logger is lazy, how do I ignore it?
 #is_deeply($note_thawed, $note, 'Unserialised note is the same as original');
 
-

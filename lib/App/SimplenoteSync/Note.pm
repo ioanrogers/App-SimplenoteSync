@@ -17,8 +17,9 @@ extends 'WebService::Simplenote::Note';
 
 # XXX trigger is always fired before file_extension is set
 has file => (
-    is        => 'rw',
-    isa      => InstanceOf['Path::Class::File'],
+    is  => 'rw',
+    isa => InstanceOf ['Path::Class::File'],
+
     #trigger   => \&_has_markdown_ext,
     predicate => 'has_file',
     lazy      => 1,
@@ -37,10 +38,10 @@ has file_extension => (
 );
 
 has notes_dir => (
-    is       => 'ro',
-    lazy     => 1,
-    isa      => InstanceOf['Path::Class::Dir'],
-    default  => sub {
+    is      => 'ro',
+    lazy    => 1,
+    isa     => InstanceOf ['Path::Class::Dir'],
+    default => sub {
         my $self = shift;
         say "NOTES DIR?";
         if ($self->has_file) {
@@ -55,11 +56,11 @@ has notes_dir => (
 has ignored => (
     is      => 'rw',
     isa     => Bool,
-    default => sub { 0 },
+    default => sub {0},
 );
 
 # set the markdown systemtag if the file has a markdown extension
-method _has_markdown_ext(@_) {
+method _has_markdown_ext (@_) {
     p $self;
     my $ext = $self->file_extension->{markdown};
 
@@ -71,12 +72,13 @@ method _has_markdown_ext(@_) {
 }
 
 # Convert note's title into file
-method _title_to_filename(@_) {
+method _title_to_filename (@_) {
     say "TITLE TO FILENAME";
     p @_;
+
     # don't change if already set
     #if (defined $self->file) {
-        #return;
+    #return;
     #}
 
     # TODO trim
@@ -98,13 +100,13 @@ method _title_to_filename(@_) {
     return 1;
 }
 
-method load_content {
+method load_content () {
     my $content;
 
     if (!$self->file) {
         $self->_title_to_filename;
     }
-    
+
     try {
         $content = $self->file->slurp(iomode => '<:utf8');
     }
@@ -117,7 +119,7 @@ method load_content {
     return 1;
 }
 
-method save_content {
+method save_content () {
     if (!$self->file) {
         $self->_title_to_filename;
     }
@@ -138,7 +140,7 @@ method save_content {
 
 around 'TO_JSON' => sub {
     my ($orig, $self) = @_;
-    
+
     my $hash = $orig->($self);
 
     delete $hash->{notes_dir};
@@ -148,6 +150,5 @@ around 'TO_JSON' => sub {
 
     return $hash;
 };
-
 
 1;
