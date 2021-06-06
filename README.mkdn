@@ -4,7 +4,7 @@ App::SimplenoteSync - Synchronise text notes with simplenoteapp.com
 
 # VERSION
 
-version 0.2.0
+version 0.2.1
 
 # AUTHORS
 
@@ -13,7 +13,7 @@ version 0.2.0
 
 # COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2012 by Ioan Rogers.
+This software is Copyright (c) 2021 by Ioan Rogers.
 
 This is free software, licensed under:
 
@@ -26,5 +26,5 @@ web interface at [https://github.com/ioanrogers/App-SimplenoteSync/issues](https
 
 # SOURCE
 
-The development version is on github at [http://github.com/ioanrogers/App-SimplenoteSync](http://github.com/ioanrogers/App-SimplenoteSync)
+The development version is on github at [https://github.com/ioanrogers/App-SimplenoteSync](https://github.com/ioanrogers/App-SimplenoteSync)
 and may be cloned from [git://github.com/ioanrogers/App-SimplenoteSync.git](git://github.com/ioanrogers/App-SimplenoteSync.git)
